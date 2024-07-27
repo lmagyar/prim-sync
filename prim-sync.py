@@ -15,7 +15,11 @@ from itertools import chain
 from pathlib import Path, PurePath, PurePosixPath
 from typing import Dict, cast
 
-import paramiko
+# see https://github.com/paramiko/paramiko/issues/2419
+import warnings
+from cryptography.utils import CryptographyDeprecationWarning
+with warnings.catch_warnings(action="ignore", category=CryptographyDeprecationWarning):
+    import paramiko
 
 ########
 
