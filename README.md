@@ -161,6 +161,8 @@ Then add your phone to the known_hosts file if your favorite SFTP client hasn't 
 
 ## Usage
 
+Create a backup of your files.
+
 The first upload is better done over USB connection and manual copy, because copying files over Wi-Fi is much slower. The prim-sync script handles this without problems and then handles the changes in the future.
 
 The first run will be longer then a regular run, because without prior knowledge, the prim-sync script handles all files on both side as newly created and compares them or their hash (hashing is much faster than downloading and comparing the content).
