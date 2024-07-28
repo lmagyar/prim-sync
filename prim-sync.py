@@ -975,7 +975,7 @@ class WideHelpFormatter(argparse.HelpFormatter):
 def main():
     try:
         parser = argparse.ArgumentParser(
-            description="Bidirectional sync script optimized for the prim-ftpd Android sftp server (https://github.com/wolpi/prim-ftpd), for more details see https://github.com/lmagyar/prim-sync",
+            description="Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the Primitive FTPd Android SFTP server (https://github.com/wolpi/prim-ftpd), for more details see https://github.com/lmagyar/prim-sync",
             formatter_class=WideHelpFormatter)
         parser.add_argument('host', help="just the host name, without '@' and ':'; without name, use only fix, non-dynamic IPs")
         parser.add_argument('port', type=int)
