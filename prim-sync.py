@@ -981,7 +981,7 @@ def main():
         parser.add_argument('port', type=int)
         parser.add_argument('keyfile', help="key filename located under your .ssh folder")
         parser.add_argument('local_prefix', metavar='local-prefix', help="local path to the parent of the folder to be synchronized")
-        parser.add_argument('remote_read_prefix', metavar='remote-read-prefix', help="read-only remote path to the parent of the folder to be synchronized, eg. /rosaf or /fs/storage/XXXX-XXXX")
+        parser.add_argument('remote_read_prefix', metavar='remote-read-prefix', help="read-only remote path to the parent of the folder to be synchronized, eg. /fs/storage/XXXX-XXXX or /rosaf")
         parser.add_argument('remote_write_prefix', metavar='remote-write-prefix', help="read-write remote path to the parent of the folder to be synchronized, eg. /saf (you can use * if this is the same as the read-only remote path above)")
         parser.add_argument('local_folder', metavar='local-folder', help="the local folder name to be synchronized")
         parser.add_argument('remote_folder', metavar='remote-folder', help="the remote folder name to be synchronized (you can use * if this is the same as the local folder name above)")
@@ -1003,7 +1003,7 @@ def main():
         parser.add_argument('-V', '--valid-chars-pattern', metavar="PATTERN", dest='valid_chars', help="replace invalid [] sftp chars in filenames with chars from pattern (1 or 2 chars long)", action='store')
         parser.add_argument('-d', '--dry', help="no files changed in the synchronized folder(s), only internal state gets updated and temporary files gets cleaned up", default=False, action='store_true')
         parser.add_argument('-D', '--dry-on-conflict', help="in case of unresolved conflict(s), run dry", default=False, action='store_true')
-        parser.add_argument('--overwrite-destination', help="don't use temporary files and renaming for failsafe updates - you will definitely shoot yourself in the foot if you enable this", default=False, action='store_true')
+        parser.add_argument('--overwrite-destination', help="don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot", default=False, action='store_true')
         parser.add_argument('--ignore-locks', help="ignore locks left over from previous run", default=False, action='store_true')
 
         args = parser.parse_args()

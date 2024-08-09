@@ -193,7 +193,7 @@ positional arguments:
   port
   keyfile                            key filename located under your .ssh folder
   local-prefix                       local path to the parent of the folder to be synchronized
-  remote-read-prefix                 read-only remote path to the parent of the folder to be synchronized, eg. /rosaf or /fs/storage/XXXX-XXXX
+  remote-read-prefix                 read-only remote path to the parent of the folder to be synchronized, eg. /fs/storage/XXXX-XXXX or /rosaf
   remote-write-prefix                read-write remote path to the parent of the folder to be synchronized, eg. /saf (you can use * if this is the same as the read-only remote path above)
   local-folder                       the local folder name to be synchronized
   remote-folder                      the remote folder name to be synchronized (you can use * if this is the same as the local folder name above)
@@ -223,7 +223,7 @@ options:
                                      replace invalid [] sftp chars in filenames with chars from pattern (1 or 2 chars long)
   -d, --dry                          no files changed in the synchronized folder(s), only internal state gets updated and temporary files gets cleaned up
   -D, --dry-on-conflict              in case of unresolved conflict(s), run dry
-  --overwrite-destination            don't use temporary files and renaming for failsafe updates - you will definitely shoot yourself in the foot if you enable this
+  --overwrite-destination            don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot
   --ignore-locks                     ignore locks left over from previous run
 ```
 
