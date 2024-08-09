@@ -277,13 +277,14 @@ class Local:
                     yield from _scandir(relative_path)
                 else:
                     if any(c in '[]' for c in entry.name):
-                        logger.info("<<< INVALID %s", relative_name)
                         if options.valid_chars:
                             valid_relative_name = str(path / options.valid_filename(entry.name))
+                            logger.info("<<< INVALID %s", relative_name)
                             logger.info("              renaming to: %s", valid_relative_name)
                             os.rename(self.local_path / relative_name, self.local_path / valid_relative_name)
                             relative_name = valid_relative_name
                         else:
+                            logger.warning("<<< INVALID %s", relative_name)
                             self.has_invalid_filename = True
                     if not options.overwrite_destination:
                         stat = entry.stat(follow_symlinks=False)
@@ -482,13 +483,15 @@ class Remote:
                     yield from _scandir(relative_path)
                 else:
                     if any(c in '[]' for c in entry.filename):
-                        logger.info("INVALID >>> %s", relative_name)
                         if options.valid_chars:
                             valid_relative_name = str(path / options.valid_filename(entry.filename))
+                            logger.info("INVALID >>> %s", relative_name)
                             logger.info("              renaming to: %s", valid_relative_name)
+                            # you can rename these files, only writing them on SAF cause error
                             self.sftp.rename(str(self.remote_write_path / relative_name), str(self.remote_write_path / valid_relative_name))
                             relative_name = valid_relative_name
                         else:
+                            logger.warning("INVALID >>> %s", relative_name)
                             self.has_invalid_filename = True
                     yield relative_name, FileInfo(size=entry.st_size or 0, mtime=datetime.fromtimestamp(entry.st_mtime or 0, timezone.utc))
         yield from _scandir(PurePosixPath(''))
