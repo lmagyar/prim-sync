@@ -288,7 +288,7 @@ class Local:
                     if not options.overwrite_destination:
                         stat = entry.stat(follow_symlinks=False)
                         if stat.st_nlink > 1:
-                            logger.info("<<< HARDLNK %s", relative_name)
+                            logger.warning("<<< HARDLNK %s", relative_name)
                             self.has_unsupported_hardlink = True
                     stat = entry.stat(follow_symlinks=True)
                     yield relative_name, LocalFileInfo(size=stat.st_size, mtime=datetime.fromtimestamp(stat.st_mtime, timezone.utc),
