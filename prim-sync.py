@@ -1009,8 +1009,12 @@ def main():
         parser.add_argument('--overwrite-destination', help="don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot", default=False, action='store_true')
         parser.add_argument('--ignore-locks', help="ignore locks left over from previous run", default=False, action='store_true')
 
+        parser.add_argument('--debug', help="use debug level logging, overrides the --silent option", default=False, action='store_true')
+
         args = parser.parse_args()
 
+        if args.debug:
+            logger.setLevel(logging.DEBUG)
         logger.prepare(args.timestamp, args.silent, args.silent_scanning, args.silent_headers)
 
         global options
@@ -1054,7 +1058,6 @@ def main():
         logger.error(repr(e))
     
 if __name__ == "__main__":
-    # logger.setLevel(logging.DEBUG)
     with suppress(KeyboardInterrupt):
         main()
     exit(logger.exitcode)
