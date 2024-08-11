@@ -14,12 +14,12 @@ See my other project, https://github.com/lmagyar/prim-ctrl, for remote managemen
 
 ## Features
 
-- Write SD card (with Primitive FTPd and Storage Access Framework)
 - Follow local symlinks
 - Hash files for fast comparison ***( !!! currently requires the forked Primitive FTPd !!! )***
-- Failsafe, restartable operation (costs some time, remote renames on SD card are slow)
+- Write SD card (with Primitive FTPd and Storage Access Framework)
 - Dual access in case of SD card (read-only plain-old file-system for fast scan and download and writing with the slower Storage Access Framework)
-- Automatically replace `[` and `]` chars (that are invalid for SFTP transfer)
+- Failsafe, restartable operation (costs some time, remote renames on SD card are slow)
+- Automatically replace `[` and `]` chars (that are invalid for SD card and Storage Access Framework)
 
 #### Notes on following local symlinks
 
@@ -38,7 +38,7 @@ See my other project, https://github.com/lmagyar/prim-ctrl, for remote managemen
 
 You need to install:
 - Primitive FTPd on your phone - see: https://github.com/wolpi/prim-ftpd ***use the F-Droid version!***
-- Python 3.12, pip and venv - see: https://www.python.org/downloads/ or
+- Python 3.12+, pip and venv - see: https://www.python.org/downloads/ or
   <details><summary>Unix</summary>
 
   ```
@@ -83,7 +83,7 @@ You have to enable Primitive FTPd to run as much in the background as possible, 
 
 ### Networking
 
-You have to able to access your phone with a constant url / host name (fixed LAN IP, mDNS, VPN, hosts file, your choice). Because this host name will be used as unique identifier to store the per-device-sync-state between runs.
+You have to able to access your phone with a constant url or host name (fixed LAN IP, mDNS, VPN, hosts file, your choice). Because this host name will be used as unique identifier to store the per-device-sync-state between runs.
 
 ### Primitive FTPd
 
@@ -99,15 +99,17 @@ You have to able to access your phone with a constant url / host name (fixed LAN
       - Secure Port: eg. 2222
       - Server Idle Timeout: 0
       - Idle timeout to stop server: eg. 60 or 0
-      - IP to bind to: your Wi-Fi or VPN
+      - IP to bind to: optionally your Wi-Fi or VPN
   - UI
       - You can disable everything, but this is based on your preferences
   - System
       - Server Start Directory: /storage/emulated/0
       - Prevent Standby: enable
+      - Announce server in LAN: enable if you use zeroconf (DNS-SD)
+      - Servername: make it unique, especially when multiple phones are synced
       - SFTP Hostkey algorithms: enable at least ed25519
       - Other options can be disabled or left unchanged
-- Close and restart the whole app
+- Close and restart the whole app, not just stop/start the server
 
 ### SSH keys
 
@@ -157,23 +159,23 @@ Then add your phone to the known_hosts file if your favorite SFTP client hasn't 
   - Authentication
       - Password: delete it
       - Public Key Authentication: enable
-- Close and restart the whole app
+- Close and restart the whole app, not just stop/start the server
 
 ## Usage
 
-Create a backup of your files.
+Create a backup of your files!!!
 
 The first upload is better done over USB connection and manual copy, because copying files over Wi-Fi is much slower. The prim-sync script handles this without problems and then handles the changes in the future.
 
-The first run will be longer then a regular run, because without prior knowledge, the prim-sync script handles all files on both side as newly created and compares them or their hash (hashing is much faster than downloading and comparing the content).
+The first run will be longer then a regular run, because without prior knowledge, the prim-sync script handles all files on both sides as newly created and compares them or their hash (hashing is much faster than downloading and comparing the content).
 
 On regular runs the meaning of the log lines are:
 - RECOVER - The previous run failed (probably network/connection problem), and there are intermediate/leftover files that are deleted on the next run.
-- INVALID - Invalid characters in the filename are not replaced.
+- INVALID - Invalid characters in the filename, can be replaced automatically.
 - HARDLNK - There are hardlinks on the destination side and --overwrite-destination command line option is not used.
 - CHANGED - The destination file changed after the decision is made to update it and before it replaced by the new content, this conflict will be handled on the next run.
 - Comparing, Hashing - Comparing the content or the hash of the files on the two sides.
-- <<< !!! >>> - Conflicting changes that are not resolved by any command line option.
+- <<< !!! >>> - Conflicting changes that are not resolved by any command line option, the details are in the next line.
 
 Notes:
 - File creation times (birthtime) are:
