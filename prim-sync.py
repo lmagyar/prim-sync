@@ -986,6 +986,7 @@ class WideHelpFormatter(argparse.HelpFormatter):
         super().__init__(prog, indent_increment, max_help_position, width)
 
 def main():
+    args = None
     try:
         parser = argparse.ArgumentParser(
             description="Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the Primitive FTPd Android SFTP server (https://github.com/wolpi/prim-ftpd), for more details see https://github.com/lmagyar/prim-sync",
@@ -1019,7 +1020,7 @@ def main():
         parser.add_argument('--overwrite-destination', help="don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot", default=False, action='store_true')
         parser.add_argument('--ignore-locks', help="ignore locks left over from previous run", default=False, action='store_true')
 
-        parser.add_argument('--debug', help="use debug level logging, overrides the --silent option", default=False, action='store_true')
+        parser.add_argument('--debug', help="use debug level logging and add stack trace for exceptions, overrides the --silent option", default=False, action='store_true')
 
         args = parser.parse_args()
 
@@ -1065,7 +1066,10 @@ def main():
                 sync.run()
 
     except Exception as e:
-        logger.error(repr(e))
+        if not args or args.debug:
+            logger.exception(e)
+        else:
+            logger.error(repr(e))
     
 if __name__ == "__main__":
     with suppress(KeyboardInterrupt):
