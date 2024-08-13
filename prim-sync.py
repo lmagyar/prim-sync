@@ -1036,16 +1036,6 @@ def main():
             ignore_locks=args.ignore_locks
         )
 
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
-        ssh.connect(
-            hostname=args.host,
-            port=args.port,
-            key_filename=str(Path.home() / ".ssh" / args.keyfile),
-            passphrase=None)
-        sftp = ssh.open_sftp()
-
         local_prefix = Path(args.local_prefix)
         remote_read_prefix = PurePosixPath(args.remote_read_prefix)
         remote_write_prefix = PurePosixPath(args.remote_write_prefix if args.remote_write_prefix != '*' else args.remote_read_prefix)
@@ -1055,11 +1045,20 @@ def main():
         local_path = str(local_prefix / local_folder)
         remote_read_path = str(remote_read_prefix / remote_folder)
         remote_write_path = str(remote_write_prefix / remote_folder)
-    
-        with Local(local_path) as local:
-            with Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote:
-                sync = BidirectionalSync(local, remote, Storage(local_path, args.host))
-                sync.run()
+
+        with paramiko.SSHClient() as ssh:
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
+            ssh.connect(
+                hostname=args.host,
+                port=args.port,
+                key_filename=str(Path.home() / ".ssh" / args.keyfile),
+                passphrase=None)
+            with ssh.open_sftp() as sftp:
+                with Local(local_path) as local:
+                    with Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote:
+                        sync = BidirectionalSync(local, remote, Storage(local_path, args.host))
+                        sync.run()
 
     except Exception as e:
         if not args or args.debug:
