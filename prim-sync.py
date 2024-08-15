@@ -5,6 +5,7 @@ import logging
 import os
 import pickle
 import shutil
+import socket
 import stat
 import sys
 from contextlib import suppress
@@ -16,6 +17,8 @@ from pathlib import Path, PurePath, PurePosixPath
 from typing import Dict, cast
 
 import paramiko
+from platformdirs import user_cache_dir
+from zeroconf import Zeroconf
 
 ########
 
@@ -626,9 +629,9 @@ class Remote:
             self.sftp.remove(str(self.remote_write_path / LOCK_FILE_NAME))
 
 class Storage:
-    def __init__(self, local_path: str, host: str):
+    def __init__(self, local_path: str, server_name: str):
         self.state_path = Path(local_path) / STATE_DIR_NAME
-        self.state_filename = str(self.state_path / ''.join([x if (x.isalnum() or x in '.-') else '_' for x in host]))
+        self.state_filename = str(self.state_path / server_name)
 
     def save_psync_info(self, local_data: dict, remote_data: dict):
         self.state_path.mkdir(parents=True, exist_ok=True)
@@ -977,6 +980,60 @@ class BidirectionalSync(Sync):
 
 ########
 
+class Cache:
+    PRIM_SYNC_APP_NAME = 'prim-sync'
+
+    def __init__(self):
+        self.cache_path = Path(user_cache_dir(Cache.PRIM_SYNC_APP_NAME, False))
+
+    def set(self, key:str, value: str):
+        self.cache_path.mkdir(parents=True, exist_ok=True)
+        cache_filename = str(self.cache_path / key)
+        with open(cache_filename, 'wt') as file:
+            file.write(value)
+
+    def get(self, key:str):
+        self.cache_path.mkdir(parents=True, exist_ok=True)
+        cache_filename = str(self.cache_path / key)
+        if os.path.exists(cache_filename) and os.path.isfile(cache_filename):
+            with open(cache_filename, 'rt') as file:
+                return file.readline().rstrip()
+        else:
+            return None
+
+class SftpServiceCache:
+    def __init__(self, cache: Cache):
+        self.cache = cache
+
+    def set(self, server_name:str, host: str, port: int):
+        self.cache.set(server_name, '|'.join([host, str(port)]))
+
+    def get(self, server_name:str):
+        if cached_value := self.cache.get(server_name):
+            cached_value = cached_value.split('|')
+            return (cached_value[0], int(cached_value[1]))
+        else:
+            return (None, None)
+
+class SftpServiceResolver:
+    SFTP_SERVICE_TYPE = '_sftp-ssh._tcp.local.'
+
+    def __init__(self):
+        self.zeroconf = Zeroconf()
+    def __enter__(self):
+        self.zeroconf.__enter__()
+        return self
+    def __exit__(self, exception_type, exception_value, exception_traceback):
+        self.zeroconf.__exit__(exception_type, exception_value, exception_traceback)
+
+    def get(self, server_name: str, timeout: float = 3):
+        service = self.zeroconf.get_service_info(SftpServiceResolver.SFTP_SERVICE_TYPE, f"{server_name}.{SftpServiceResolver.SFTP_SERVICE_TYPE}", timeout=int(timeout*1000))
+        if not service or not service.port:
+            raise TimeoutError("Unable to resolve zeroconf (DNS-SD) service information")
+        return (service.parsed_addresses()[0], int(service.port))
+
+########
+
 class WideHelpFormatter(argparse.HelpFormatter):
     def __init__(self, prog: str, indent_increment: int = 2, max_help_position: int = 37, width: int | None = None) -> None:
         super().__init__(prog, indent_increment, max_help_position, width)
@@ -987,8 +1044,8 @@ def main():
         parser = argparse.ArgumentParser(
             description="Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the Primitive FTPd Android SFTP server (https://github.com/wolpi/prim-ftpd), for more details see https://github.com/lmagyar/prim-sync",
             formatter_class=WideHelpFormatter)
-        parser.add_argument('host', help="just the host name, without '@' and ':'; without name, use only fix, non-dynamic IPs")
-        parser.add_argument('port', type=int)
+
+        parser.add_argument('server_name', help="unique name for the server (if zeroconf is used, then the Servername configuration option from Primitive FTPd, otherwise see the --address option also)")
         parser.add_argument('keyfile', help="key filename located under your .ssh folder")
         parser.add_argument('local_prefix', metavar='local-prefix', help="local path to the parent of the folder to be synchronized")
         parser.add_argument('remote_read_prefix', metavar='remote-read-prefix', help="read-only remote path to the parent of the folder to be synchronized, eg. /fs/storage/XXXX-XXXX or /rosaf")
@@ -996,8 +1053,9 @@ def main():
         parser.add_argument('local_folder', metavar='local-folder', help="the local folder name to be synchronized")
         parser.add_argument('remote_folder', metavar='remote-folder', help="the remote folder name to be synchronized (you can use * if this is the same as the local folder name above)")
 
-        parser.add_argument('-s', '--silent', help="only errors printed", default=False, action='store_true')
+        parser.add_argument('-a', '--address', nargs=2, metavar=('host', 'port') , help="if zeroconf is not used, then the address of the server (the host name is without '@' and ':')")
         parser.add_argument('-t', '--timestamp', help="prefix each message with an UTC timestamp", default=False, action='store_true')
+        parser.add_argument('-s', '--silent', help="only errors printed", default=False, action='store_true')
         parser.add_argument('-ss', '--silent-scanning', help="don't print scanned remote folders as progress indicator", default=False, action='store_true')
         parser.add_argument('-sh', '--silent-headers', help="don't print headers", default=False, action='store_true')
         parser.add_argument('-M', '--dont-use-mtime-for-comparison', dest="use_mtime_for_comparison", help="beyond size, modification time or content must be equal, if both is disabled, only size is compared", default=True, action='store_false')
@@ -1023,6 +1081,9 @@ def main():
             logger.setLevel(logging.DEBUG)
         logger.prepare(args.timestamp, args.silent, args.silent_scanning, args.silent_headers)
 
+        if args.address and any(c in args.address[0] for c in r'/@:'):
+            raise ValueError("Host name can't contain '/@:' characters")
+
         global options
         options = Options(
             use_mtime_for_comparison=args.use_mtime_for_comparison, use_content_for_comparison=args.use_content_for_comparison, use_hash_for_content_comparison=args.use_hash_for_content_comparison,
@@ -1045,19 +1106,38 @@ def main():
         remote_read_path = str(remote_read_prefix / remote_folder)
         remote_write_path = str(remote_write_prefix / remote_folder)
 
-        with paramiko.SSHClient() as ssh:
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
-            ssh.connect(
-                hostname=args.host,
-                port=args.port,
-                key_filename=str(Path.home() / ".ssh" / args.keyfile),
-                passphrase=None)
-            with ssh.open_sftp() as sftp:
-                with Local(local_path) as local:
-                    with Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote:
-                        sync = BidirectionalSync(local, remote, Storage(local_path, args.host))
-                        sync.run()
+        service_cache = SftpServiceCache(Cache())
+        with SftpServiceResolver() as service_resolver:
+            with paramiko.SSHClient() as ssh:
+                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
+                def ssh_connect(host: str, port: int):
+                    logger.debug("Connecting to %s on port %d", host, port)
+                    ssh.connect(
+                        hostname=host,
+                        port=port,
+                        key_filename=str(Path.home() / ".ssh" / 'id_ed25519_sftp'),
+                        passphrase=None,
+                        timeout=10)
+                if args.address:
+                    ssh_connect(args.address[0], int(args.address[1]))
+                else:
+                    host, port = service_cache.get(args.server_name)
+                    if host and port:
+                        try:
+                            ssh_connect(host, port)
+                        except (TimeoutError, socket.gaierror):
+                            host = port = None
+                    if not host or not port:
+                        logger.debug("Resolving %s", args.server_name)
+                        host, port = service_resolver.get(args.server_name, 30)
+                        ssh_connect(host, port)
+                        service_cache.set(args.server_name, host, port)
+                with ssh.open_sftp() as sftp:
+                    with Local(local_path) as local:
+                        with Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote:
+                            sync = BidirectionalSync(local, remote, Storage(local_path, args.server_name))
+                            sync.run()
 
     except Exception as e:
         if not args or args.debug:

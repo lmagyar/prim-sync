@@ -83,7 +83,7 @@ You have to enable Primitive FTPd to run as much in the background as possible, 
 
 ### Networking
 
-You have to able to access your phone with a constant url or host name (fixed LAN IP, mDNS, VPN, hosts file, your choice). Because this host name will be used as unique identifier to store the per-device-sync-state between runs.
+Either use the built-in zeroconf (DNS-SD) functionality in Primitive FTPd (see below), or set up a constant address (IP or host name) for your phone (fixed LAN IP, VPN, hosts file, your choice).
 
 ### Primitive FTPd
 
@@ -106,7 +106,7 @@ You have to able to access your phone with a constant url or host name (fixed LA
       - Server Start Directory: /storage/emulated/0
       - Prevent Standby: enable
       - Announce server in LAN: enable if you use zeroconf (DNS-SD)
-      - Servername: make it unique, especially when multiple phones are synced
+      - Servername: make it unique, even if you don't use zeroconf, especially when multiple phones are synced, because this will be used as unique identifier to store the per-device-sync-state between runs
       - SFTP Hostkey algorithms: enable at least ed25519
       - Other options can be disabled or left unchanged
 - Close and restart the whole app, not just stop/start the server
