@@ -172,8 +172,8 @@ except (ImportError, AttributeError, OSError, ValueError):
 else:
     SETFILETIME_SUPPORTED = os.name == "nt"
 
-def set_file_time(full_path, btime:float | None, atime:float | None, mtime:float | None, follow_symlinks=True):
-    def _convert_timestamp(timestamp, name:str):
+def set_file_time(full_path, btime: float | None, atime: float | None, mtime: float | None, follow_symlinks = True):
+    def _convert_timestamp(timestamp, name: str):
         time = int(timestamp * 10000000) + 116444736000000000 if timestamp else 0
         if not 0 <= time < (1 << 64):
             raise ValueError(f"The value of the {name} exceeds u64 size: {time}")
