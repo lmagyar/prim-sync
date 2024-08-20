@@ -92,6 +92,17 @@ class Logger(logging.Logger):
             self.exitcode = 1
         super().log(level, msg, *args, **kwargs)
 
+class LazyStr:
+    def __init__(self, func, *args, **kwargs):
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+        self.result = None
+    def __str__(self):
+        if self.result is None:
+            self.result = str(self.func(*self.args, **self.kwargs))
+        return self.result
+
 logger = Logger(Path(sys.argv[0]).name)
 
 ########
@@ -870,13 +881,12 @@ class Sync:
                         logger.info("< CHANGED >   will be processed only on the next run")
 
         for relative_path, reason in sorted(self.conflict.items(), key=lambda p: (p.count('/'), p)):
-            if logger.isEnabledFor(logging.WARNING):
-                logger.warning(f"<<< !!! >>> {relative_path}")
-                reason = f"              {reason}"
+            def extend_reason():
+                extended_reason = f"              {reason}"
                 local_fileinfo = self.local_current.get(relative_path)
                 remote_fileinfo = self.remote_current.get(relative_path)
                 if local_fileinfo and remote_fileinfo:
-                    reason += (f", size: {_filesize_fmt(local_fileinfo.size)} ({format(local_fileinfo.size, ',d').replace(',',' ')}) "
+                    extended_reason += (f", size: {_filesize_fmt(local_fileinfo.size)} ({format(local_fileinfo.size, ',d').replace(',',' ')}) "
                         f"{'>' if local_fileinfo.size > remote_fileinfo.size else '<' if local_fileinfo.size < remote_fileinfo.size else '='} "
                         f"{_filesize_fmt(remote_fileinfo.size)} ({format(remote_fileinfo.size, ',d').replace(',',' ')})"
                         f", time: {local_fileinfo.mtime} {'>' if local_fileinfo.mtime > remote_fileinfo.mtime else '<' if local_fileinfo.mtime < remote_fileinfo.mtime else '='} {remote_fileinfo.mtime}")
@@ -888,11 +898,13 @@ class Sync:
                         fileinfo = remote_fileinfo
                         previous_fileinfo = self.remote_previous.get(relative_path)
                     if fileinfo and previous_fileinfo:
-                        reason += (f", size: {_filesize_fmt(previous_fileinfo.size)} ({format(previous_fileinfo.size, ',d').replace(',',' ')}) -> {_filesize_fmt(fileinfo.size)} ({format(fileinfo.size, ',d').replace(',',' ')})"
+                        extended_reason += (f", size: {_filesize_fmt(previous_fileinfo.size)} ({format(previous_fileinfo.size, ',d').replace(',',' ')}) -> {_filesize_fmt(fileinfo.size)} ({format(fileinfo.size, ',d').replace(',',' ')})"
                             f", time: {previous_fileinfo.mtime} -> {fileinfo.mtime}")
                     elif fileinfo:
-                        reason += f", size: {_filesize_fmt(fileinfo.size)} ({format(fileinfo.size, ',d').replace(',',' ')}), time: {fileinfo.mtime}"
-                logger.warning(reason)
+                        extended_reason += f", size: {_filesize_fmt(fileinfo.size)} ({format(fileinfo.size, ',d').replace(',',' ')}), time: {fileinfo.mtime}"
+                return extended_reason
+            logger.warning("<<< !!! >>> %s", relative_path)
+            logger.warning(LazyStr(extend_reason))
             _forget_changes(self.local_current, self.local_previous, relative_path)
             _forget_changes(self.remote_current, self.remote_previous, relative_path)
 
