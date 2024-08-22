@@ -1030,19 +1030,14 @@ class SftpServiceCache:
 class SftpServiceResolver:
     SFTP_SERVICE_TYPE = '_sftp-ssh._tcp.local.'
 
-    def __init__(self):
-        self.zeroconf = Zeroconf()
-    def __enter__(self):
-        self.zeroconf.__enter__()
-        return self
-    def __exit__(self, exception_type, exception_value, exception_traceback):
-        self.zeroconf.__exit__(exception_type, exception_value, exception_traceback)
+    def __init__(self, zeroconf: Zeroconf):
+        self.zeroconf = zeroconf
 
-    def get(self, server_name: str, timeout: float = 3):
-        service = self.zeroconf.get_service_info(SftpServiceResolver.SFTP_SERVICE_TYPE, f"{server_name}.{SftpServiceResolver.SFTP_SERVICE_TYPE}", timeout=int(timeout*1000))
-        if not service or not service.port:
+    def get(self, service_name: str, timeout: float = 3):
+        service_info = self.zeroconf.get_service_info(SftpServiceResolver.SFTP_SERVICE_TYPE, f"{service_name}.{SftpServiceResolver.SFTP_SERVICE_TYPE}", timeout=int(timeout*1000))
+        if not service_info or not service_info.port:
             raise TimeoutError("Unable to resolve zeroconf (DNS-SD) service information")
-        return (service.parsed_addresses()[0], int(service.port))
+        return (service_info.parsed_addresses()[0], int(service_info.port))
 
 ########
 
@@ -1119,7 +1114,8 @@ def main():
         remote_write_path = str(remote_write_prefix / remote_folder)
 
         service_cache = SftpServiceCache(Cache())
-        with SftpServiceResolver() as service_resolver:
+        with Zeroconf() as zeroconf:
+            service_resolver = SftpServiceResolver(zeroconf)
             with paramiko.SSHClient() as ssh:
                 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
