@@ -253,7 +253,7 @@ class Local:
     def scandir(self):
         def _scandir(path: PurePosixPath):
             while True: # recovery
-                entries = dict({e.name : e for e in os.scandir(self.local_path / path)})
+                entries = dict({e.name: e for e in os.scandir(self.local_path / path)})
                 oldtmpnew_entries = list([e for e in entries.keys() if e.endswith(OLD_FILE_SUFFIX) or e.endswith(TMP_FILE_SUFFIX) or e.endswith(NEW_FILE_SUFFIX)])
                 if not oldtmpnew_entries:
                     break
@@ -459,7 +459,7 @@ class Remote:
         def _scandir(path: PurePosixPath):
             logger.info_scanning("Scanning    %s", str(self.local_folder / path))
             while True: # recovery
-                entries = dict({e.filename : e for e in self.sftp.listdir_attr(str(self.remote_read_path / path))})
+                entries = dict({e.filename: e for e in self.sftp.listdir_attr(str(self.remote_read_path / path))})
                 oldtmpnew_entries = list([e for e in entries.keys() if e.endswith(OLD_FILE_SUFFIX) or e.endswith(TMP_FILE_SUFFIX) or e.endswith(NEW_FILE_SUFFIX)])
                 if not oldtmpnew_entries:
                     break
@@ -998,13 +998,13 @@ class Cache:
     def __init__(self):
         self.cache_path = Path(user_cache_dir(Cache.PRIM_SYNC_APP_NAME, False))
 
-    def set(self, key:str, value: str):
+    def set(self, key: str, value: str):
         self.cache_path.mkdir(parents=True, exist_ok=True)
         cache_filename = str(self.cache_path / key)
         with open(cache_filename, 'wt') as file:
             file.write(value)
 
-    def get(self, key:str):
+    def get(self, key: str):
         self.cache_path.mkdir(parents=True, exist_ok=True)
         cache_filename = str(self.cache_path / key)
         if os.path.exists(cache_filename) and os.path.isfile(cache_filename):
@@ -1102,7 +1102,7 @@ def main():
             newer_wins=args.newer_wins, older_wins=args.older_wins,
             change_wins_over_deletion=args.change_wins_over_deletion, deletion_wins_over_change=args.deletion_wins_over_change,
             local_wins_patterns=set(args.local_wins_patterns), remote_wins_patterns=set(args.remote_wins_patterns),
-            valid_chars=dict({k : v for k, v in zip(["[", "]"], [c for c in (args.valid_chars if len(args.valid_chars) >=2 else args.valid_chars + args.valid_chars)])}),
+            valid_chars=dict({k: v for k, v in zip(["[", "]"], [c for c in (args.valid_chars if len(args.valid_chars) >=2 else args.valid_chars + args.valid_chars)])}),
             dry=args.dry, dry_on_conflict=args.dry_on_conflict,
             overwrite_destination=args.overwrite_destination,
             ignore_locks=args.ignore_locks
