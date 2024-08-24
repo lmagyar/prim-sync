@@ -1124,30 +1124,32 @@ def main():
             with paramiko.SSHClient() as ssh:
                 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
-                def ssh_connect(host: str, port: int, timeout: float):
-                    logger.debug("Connecting to %s on port %d (timeout is %d seconds)", host, port, timeout)
-                    ssh.connect(
-                        hostname=host,
-                        port=port,
-                        key_filename=str(Path.home() / ".ssh" / args.keyfile),
-                        passphrase=None,
-                        timeout=timeout)
-                def service_resolver_get(service_name: str, timeout: float):
-                    logger.debug("Resolving %s (timeout is %d seconds)", service_name, timeout)
-                    return service_resolver.get(service_name, timeout)
-                if args.address:
-                    ssh_connect(args.address[0], int(args.address[1]), 10)
-                else:
-                    host, port = service_cache.get(args.server_name)
-                    if host and port:
-                        try:
-                            ssh_connect(host, port, 5)
-                        except (TimeoutError, socket.gaierror):
-                            host = port = None
-                    if not host or not port:
-                        host, port = service_resolver_get(args.server_name, 30)
-                        ssh_connect(host, port, 5)
+                def connect(connect_timeout: float, resolve_timeout: float):
+                    def ssh_connect(host: str, port: int, timeout: float):
+                        logger.debug("Connecting to %s on port %d (timeout is %d seconds)", host, port, timeout)
+                        ssh.connect(
+                            hostname=host,
+                            port=port,
+                            key_filename=str(Path.home() / ".ssh" / args.keyfile),
+                            passphrase=None,
+                            timeout=timeout)
+                    def service_resolver_get(service_name: str, timeout: float):
+                        logger.debug("Resolving %s (timeout is %d seconds)", service_name, timeout)
+                        return service_resolver.get(service_name, timeout)
+                    if args.address:
+                        ssh_connect(args.address[0], int(args.address[1]), 10)
+                    else:
+                        host, port = service_cache.get(args.server_name)
+                        if host and port:
+                            try:
+                                ssh_connect(host, port, connect_timeout)
+                                return
+                            except (TimeoutError, socket.gaierror):
+                                pass
+                        host, port = service_resolver_get(args.server_name, resolve_timeout)
+                        ssh_connect(host, port, connect_timeout)
                         service_cache.set(args.server_name, host, port)
+                connect(5, 30)
                 with ssh.open_sftp() as sftp:
                     with Local(local_path) as local:
                         with Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote:
