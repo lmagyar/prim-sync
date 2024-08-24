@@ -1129,7 +1129,7 @@ def main():
                     ssh.connect(
                         hostname=host,
                         port=port,
-                        key_filename=str(Path.home() / ".ssh" / 'id_ed25519_sftp'),
+                        key_filename=str(Path.home() / ".ssh" / args.keyfile),
                         passphrase=None,
                         timeout=timeout)
                 def service_resolver_get(service_name: str, timeout: float):
