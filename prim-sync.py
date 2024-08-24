@@ -1133,8 +1133,8 @@ def main():
                         passphrase=None,
                         timeout=timeout)
                 def service_resolver_get(service_name: str, timeout: float):
-                    logger.debug("Resolving %s (timeout is %d seconds)", service_name, 30)
-                    return service_resolver.get(service_name, 30)
+                    logger.debug("Resolving %s (timeout is %d seconds)", service_name, timeout)
+                    return service_resolver.get(service_name, timeout)
                 if args.address:
                     ssh_connect(args.address[0], int(args.address[1]), 10)
                 else:
