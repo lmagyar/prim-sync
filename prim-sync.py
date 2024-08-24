@@ -1013,31 +1013,36 @@ class Cache:
         else:
             return None
 
-class SftpServiceCache:
+class ServiceCache:
     def __init__(self, cache: Cache):
         self.cache = cache
 
-    def set(self, server_name:str, host: str, port: int):
-        self.cache.set(server_name, '|'.join([host, str(port)]))
+    def set(self, service_name: str, host: str, port: int):
+        self.cache.set(service_name, '|'.join([host, str(port)]))
 
-    def get(self, server_name:str):
-        if cached_value := self.cache.get(server_name):
+    def get(self, service_name: str):
+        if cached_value := self.cache.get(service_name):
             cached_value = cached_value.split('|')
             return (cached_value[0], int(cached_value[1]))
         else:
             return (None, None)
 
-class SftpServiceResolver:
-    SFTP_SERVICE_TYPE = '_sftp-ssh._tcp.local.'
-
-    def __init__(self, zeroconf: Zeroconf):
+class ServiceResolver:
+    def __init__(self, zeroconf: Zeroconf, service_type: str):
         self.zeroconf = zeroconf
+        self.service_type = service_type
 
     def get(self, service_name: str, timeout: float = 3):
-        service_info = self.zeroconf.get_service_info(SftpServiceResolver.SFTP_SERVICE_TYPE, f"{service_name}.{SftpServiceResolver.SFTP_SERVICE_TYPE}", timeout=int(timeout*1000))
+        service_info = self.zeroconf.get_service_info(self.service_type, f"{service_name}.{self.service_type}", timeout=int(timeout*1000))
         if not service_info or not service_info.port:
             raise TimeoutError("Unable to resolve zeroconf (DNS-SD) service information")
         return (service_info.parsed_addresses()[0], int(service_info.port))
+
+SFTP_SERVICE_TYPE = '_sftp-ssh._tcp.local.'
+
+class SftpServiceResolver(ServiceResolver):
+    def __init__(self, zeroconf: Zeroconf):
+        super().__init__(zeroconf, SFTP_SERVICE_TYPE)
 
 ########
 
@@ -1113,33 +1118,35 @@ def main():
         remote_read_path = str(remote_read_prefix / remote_folder)
         remote_write_path = str(remote_write_prefix / remote_folder)
 
-        service_cache = SftpServiceCache(Cache())
         with Zeroconf() as zeroconf:
+            service_cache = ServiceCache(Cache())
             service_resolver = SftpServiceResolver(zeroconf)
             with paramiko.SSHClient() as ssh:
                 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
-                def ssh_connect(host: str, port: int):
-                    logger.debug("Connecting to %s on port %d", host, port)
+                def ssh_connect(host: str, port: int, timeout: float):
+                    logger.debug("Connecting to %s on port %d (timeout is %d seconds)", host, port, timeout)
                     ssh.connect(
                         hostname=host,
                         port=port,
                         key_filename=str(Path.home() / ".ssh" / 'id_ed25519_sftp'),
                         passphrase=None,
-                        timeout=10)
+                        timeout=timeout)
+                def service_resolver_get(service_name: str, timeout: float):
+                    logger.debug("Resolving %s (timeout is %d seconds)", service_name, 30)
+                    return service_resolver.get(service_name, 30)
                 if args.address:
-                    ssh_connect(args.address[0], int(args.address[1]))
+                    ssh_connect(args.address[0], int(args.address[1]), 10)
                 else:
                     host, port = service_cache.get(args.server_name)
                     if host and port:
                         try:
-                            ssh_connect(host, port)
+                            ssh_connect(host, port, 5)
                         except (TimeoutError, socket.gaierror):
                             host = port = None
                     if not host or not port:
-                        logger.debug("Resolving %s", args.server_name)
-                        host, port = service_resolver.get(args.server_name, 30)
-                        ssh_connect(host, port)
+                        host, port = service_resolver_get(args.server_name, 30)
+                        ssh_connect(host, port, 5)
                         service_cache.set(args.server_name, host, port)
                 with ssh.open_sftp() as sftp:
                     with Local(local_path) as local:
