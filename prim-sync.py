@@ -125,11 +125,7 @@ class Options():
     ignore_locks: bool = False
 
     def __post_init__(self):
-        if self.newer_wins and self.older_wins:
-            raise ValueError("Can't be both --newer-wins and --older-wins conflict resolution enabled")
-        if self.change_wins_over_deletion and self.deletion_wins_over_change:
-            raise ValueError("Can't be both --deletion-wins-over-change and --change-wins-over-deletion conflict resolution enabled")
-        if "[" in self.valid_chars.values() or "]" in self.valid_chars.values():
+        if any(c in self.valid_chars.values() for c in r'[]'):
             raise ValueError("Can't use [ or ] characters in --valid-chars-pattern")
 
     def valid_filename(self, filename: str):
@@ -1066,26 +1062,33 @@ def main():
         parser.add_argument('remote_folder', metavar='remote-folder', help="the remote folder name to be synchronized (you can use * if this is the same as the local folder name above)")
 
         parser.add_argument('-a', '--address', nargs=2, metavar=('host', 'port') , help="if zeroconf is not used, then the address of the server (the host name is without '@' and ':')")
-        parser.add_argument('-t', '--timestamp', help="prefix each message with an UTC timestamp", default=False, action='store_true')
-        parser.add_argument('-s', '--silent', help="only errors printed", default=False, action='store_true')
-        parser.add_argument('-ss', '--silent-scanning', help="don't print scanned remote folders as progress indicator", default=False, action='store_true')
-        parser.add_argument('-sh', '--silent-headers', help="don't print headers", default=False, action='store_true')
-        parser.add_argument('-M', '--dont-use-mtime-for-comparison', dest="use_mtime_for_comparison", help="beyond size, modification time or content must be equal, if both is disabled, only size is compared", default=True, action='store_false')
-        parser.add_argument('-C', '--dont-use-content-for-comparison', dest="use_content_for_comparison", help="beyond size, modification time or content must be equal, if both is disabled, only size is compared", default=True, action='store_false')
-        parser.add_argument('-H', '--dont-use-hash-for-content-comparison', dest="use_hash_for_content_comparison", help="not all sftp servers support hashing, but downloading content is mush slower than hashing", default=True, action='store_false')
-        parser.add_argument('-n', '--newer-wins', help="in case of conflict, newer file wins", default=False, action='store_true')
-        parser.add_argument('-o', '--older-wins', help="in case of conflict, older file wins", default=False, action='store_true')
-        parser.add_argument('-cod', '--change-wins-over-deletion', help="in case of conflict, changed/new file wins over deleted file", default=False, action='store_true')
-        parser.add_argument('-doc', '--deletion-wins-over-change', help="in case of conflict, deleted file wins over changed/new file", default=False, action='store_true')
-        parser.add_argument('-l', '--local-wins-patterns', metavar="PATTERN", help="in case of conflict, local files matching this Unix shell pattern win, multiple values are allowed, separated by space", type=str, nargs='+', default=[])
-        parser.add_argument('-r', '--remote-wins-patterns', metavar="PATTERN", help="in case of conflict, remote files matching this Unix shell pattern win, multiple values are allowed, separated by space", type=str, nargs='+', default=[])
-        parser.add_argument('-v', '--valid-chars', nargs='?', metavar="PATTERN", help="replace invalid [] SD card chars in filenames with chars from pattern (1 or 2 chars long, default is '()')", default='', const='()', action='store')
         parser.add_argument('-d', '--dry', help="no files changed in the synchronized folder(s), only internal state gets updated and temporary files gets cleaned up", default=False, action='store_true')
         parser.add_argument('-D', '--dry-on-conflict', help="in case of unresolved conflict(s), run dry", default=False, action='store_true')
+        parser.add_argument('-v', '--valid-chars', nargs='?', metavar="CHARS", help="replace invalid [] chars in SD card filenames with chars from CHARS (1 or 2 chars long, default is '()')", default='', const='()', action='store')
         parser.add_argument('--overwrite-destination', help="don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot", default=False, action='store_true')
         parser.add_argument('--ignore-locks', help="ignore locks left over from previous run", default=False, action='store_true')
 
-        parser.add_argument('--debug', help="use debug level logging and add stack trace for exceptions, overrides the --silent option", default=False, action='store_true')
+        logging_group = parser.add_argument_group('logging')
+        logging_group.add_argument('-t', '--timestamp', help="prefix each message with an UTC timestamp", default=False, action='store_true')
+        logging_group.add_argument('-s', '--silent', help="only errors printed", default=False, action='store_true')
+        logging_group.add_argument('-ss', '--silent-scanning', help="don't print scanned remote folders as progress indicator", default=False, action='store_true')
+        logging_group.add_argument('-sh', '--silent-headers', help="don't print headers", default=False, action='store_true')
+        logging_group.add_argument('--debug', help="use debug level logging and add stack trace for exceptions, overrides the --silent option", default=False, action='store_true')
+
+        comparison_group = parser.add_argument_group('comparison')
+        comparison_group.add_argument('-M', '--dont-use-mtime-for-comparison', dest="use_mtime_for_comparison", help="beyond size, modification time or content must be equal, if both is disabled, only size is compared", default=True, action='store_false')
+        comparison_group.add_argument('-C', '--dont-use-content-for-comparison', dest="use_content_for_comparison", help="beyond size, modification time or content must be equal, if both is disabled, only size is compared", default=True, action='store_false')
+        comparison_group.add_argument('-H', '--dont-use-hash-for-content-comparison', dest="use_hash_for_content_comparison", help="not all sftp servers support hashing, but downloading content is mush slower than hashing", default=True, action='store_false')
+
+        conflict_resolution_group = parser.add_argument_group('conflict resolution')
+        conflict_resolution_newer_older_group = conflict_resolution_group.add_mutually_exclusive_group()
+        conflict_resolution_newer_older_group.add_argument('-n', '--newer-wins', help="in case of conflict, newer file wins", default=False, action='store_true')
+        conflict_resolution_newer_older_group.add_argument('-o', '--older-wins', help="in case of conflict, older file wins", default=False, action='store_true')
+        conflict_resolution_change_deletion_group = conflict_resolution_group.add_mutually_exclusive_group()
+        conflict_resolution_change_deletion_group.add_argument('-cod', '--change-wins-over-deletion', help="in case of conflict, changed/new file wins over deleted file", default=False, action='store_true')
+        conflict_resolution_change_deletion_group.add_argument('-doc', '--deletion-wins-over-change', help="in case of conflict, deleted file wins over changed/new file", default=False, action='store_true')
+        conflict_resolution_group.add_argument('-l', '--local-wins-patterns', metavar="PATTERN", help="in case of conflict, local files matching this Unix shell PATTERN win, multiple values are allowed, separated by space", type=str, nargs='+', default=[])
+        conflict_resolution_group.add_argument('-r', '--remote-wins-patterns', metavar="PATTERN", help="in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space", type=str, nargs='+', default=[])
 
         args = parser.parse_args()
 

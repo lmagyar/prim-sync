@@ -92,23 +92,23 @@ Either use the built-in zeroconf (DNS-SD) functionality in Primitive FTPd (see b
 - Configuration tab:
   - Authentication
       - Anonymous Login: disable
-      - Username/Password = eg. sftp/sftp (later will be disabled)
-      - Public Key Authentication: disable (later will be enabled)
+      - Username/Password: eg. sftp/sftp (will be disabled)
+      - Public Key Authentication: disable (will be enabled)
   - Connectivity
       - Server(s) to be started: SFTP only
       - Secure Port: eg. 2222
       - Server Idle Timeout: 0
       - Idle timeout to stop server: eg. 60 or 0
-      - IP to bind to: optionally your Wi-Fi or VPN
+      - Allowed IPs pattern, IP to bind to: at first leave them empty, you can harden your security later
   - UI
-      - You can disable everything, but this is based on your preferences
+      - This is based on your preferences
   - System
       - Server Start Directory: /storage/emulated/0
       - Prevent Standby: enable
       - Announce server in LAN: enable if you use zeroconf (DNS-SD)
       - Servername: make it unique, even if you don't use zeroconf, especially when multiple phones are synced, because this will be used as unique identifier to store the per-device-sync-state between runs
       - SFTP Hostkey algorithms: enable at least ed25519
-      - Other options can be disabled or left unchanged
+      - Other options can be left unchanged
 - Close and restart the whole app, not just stop/start the server
 
 ### SSH keys
