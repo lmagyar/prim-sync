@@ -194,7 +194,7 @@ def set_file_time(full_path, btime: float | None, atime: float | None, mtime: fl
     last_access_time = _convert_timestamp(atime, "atime")
     last_write_time = _convert_timestamp(mtime, "mtime")
 
-    flags = (FILE_ATTRIBUTE_NORMAL 
+    flags = (FILE_ATTRIBUTE_NORMAL
         | FILE_FLAG_BACKUP_SEMANTICS) # You must set this flag to obtain a handle to a directory.
     if not follow_symlinks:
         flags |= FILE_FLAG_OPEN_REPARSE_POINT
@@ -206,7 +206,7 @@ def set_file_time(full_path, btime: float | None, atime: float | None, mtime: fl
         raise WinError()
     if not wintypes.BOOL(CloseHandle(handle)):
         raise WinError()
-    
+
 ########
 
 class FileInfo:
@@ -1164,7 +1164,7 @@ def main():
             logger.exception(e)
         else:
             logger.error(repr(e))
-    
+
 if __name__ == "__main__":
     with suppress(KeyboardInterrupt):
         main()
