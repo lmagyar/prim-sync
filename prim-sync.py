@@ -778,7 +778,7 @@ class Sync:
         self.remote_current = dict(sorted(self.remote.scandir()))
 
         if self.local.has_invalid_filename or self.remote.has_invalid_filename:
-            raise ValueError("There are invalid filenames, can't sync, see --valid-chars or --valid-chars-pattern options")
+            raise RuntimeError("There are invalid filenames, can't sync, see --valid-chars or --valid-chars-pattern options")
         if self.local.has_unsupported_hardlink:
             raise RuntimeError("Hardlinks can't be used without enabling --overwrite-destination option")
 
