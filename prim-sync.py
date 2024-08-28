@@ -434,7 +434,8 @@ class Local:
         try:
             self.lockfile = open(str(self.local_path / LOCK_FILE_NAME), "x" if not options.ignore_locks else "w")
         except IOError as e:
-            raise IOError(f"Can't acquire lock on local folder ({e}), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
+            e.add_note(f"Can't acquire lock on local folder ({e}), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
+            raise
         return self
 
     def __exit__(self, exc_type, exc_value, exc_tb):
@@ -627,7 +628,8 @@ class Remote:
         try:
             self.lockfile = self.sftp.open(str(self.remote_write_path / LOCK_FILE_NAME), "x" if not options.ignore_locks else "w")
         except IOError as e:
-            raise IOError(f"Can't acquire lock on remote folder ({e}), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
+            e.add_note(f"Can't acquire lock on remote folder ({e}), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
+            raise
         return self
 
     def __exit__(self, exc_type, exc_value, exc_tb):
