@@ -1165,7 +1165,10 @@ def main():
         if not args or args.debug:
             logger.exception(e)
         else:
-            logger.error(repr(e))
+            if hasattr(e, '__notes__'):
+                logger.error("%s: %s", LazyStr(repr, e), LazyStr(", ".join, e.__notes__))
+            else:
+                logger.error(LazyStr(repr, e))
 
 if __name__ == "__main__":
     with suppress(KeyboardInterrupt):
