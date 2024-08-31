@@ -497,7 +497,6 @@ class Remote:
                     if new_entry_exists:
                         self.sftp.rename(str(self.remote_write_path / path / new_entry_name), str(self.remote_write_path / path / entry_name))
                     self.sftp.remove(str(self.remote_write_path / path / old_entry_name))
-            cnt = 0
             for entry in entries.values():
                 relative_path = path / entry.filename
                 relative_name = str(relative_path)
@@ -507,9 +506,6 @@ class Remote:
                     yield relative_name + '/', None
                     yield from _scandir(relative_path)
                 else:
-                    cnt += 1
-                    if cnt % 1000 == 0:
-                        logger.debug("%d. remote file: %s", cnt, relative_name)
                     if options.valid_chars and any(c in '[]' for c in entry.filename):
                         valid_relative_name = str(path / options.valid_filename(entry.filename))
                         logger.info("INVALID >>> %s", relative_name)
