@@ -247,6 +247,7 @@ class Local:
 
     def scandir(self):
         def _scandir(path: PurePosixPath):
+            logger.debug("Scanning local %s", str(self.local_path / path))
             while True: # recovery
                 entries = dict({e.name: e for e in os.scandir(self.local_path / path)})
                 oldtmpnew_entries = list([e for e in entries.keys() if e.endswith(OLD_FILE_SUFFIX) or e.endswith(TMP_FILE_SUFFIX) or e.endswith(NEW_FILE_SUFFIX)])
@@ -437,6 +438,7 @@ class Local:
                 raise RuntimeError(f"The {path} path does not exist")
             if not stat.S_ISDIR(folder_stat.st_mode):
                 raise RuntimeError(f"The {path} path is not a folder")
+        logger.debug("Locking local")
         lock_stat = None
         try:
             _test_folder(str(self.local_path))
@@ -456,6 +458,7 @@ class Local:
 
     def __exit__(self, exc_type, exc_value, exc_tb):
         if self.lockfile:
+            logger.debug("Unlocking local")
             self.lockfile.close()
             os.remove(str(self.local_path / LOCK_FILE_NAME))
 
@@ -494,6 +497,7 @@ class Remote:
                     if new_entry_exists:
                         self.sftp.rename(str(self.remote_write_path / path / new_entry_name), str(self.remote_write_path / path / entry_name))
                     self.sftp.remove(str(self.remote_write_path / path / old_entry_name))
+            cnt = 0
             for entry in entries.values():
                 relative_path = path / entry.filename
                 relative_name = str(relative_path)
@@ -503,6 +507,9 @@ class Remote:
                     yield relative_name + '/', None
                     yield from _scandir(relative_path)
                 else:
+                    cnt += 1
+                    if cnt % 1000 == 0:
+                        logger.debug("%d. remote file: %s", cnt, relative_name)
                     if options.valid_chars and any(c in '[]' for c in entry.filename):
                         valid_relative_name = str(path / options.valid_filename(entry.filename))
                         logger.info("INVALID >>> %s", relative_name)
@@ -646,6 +653,7 @@ class Remote:
                 raise RuntimeError(f"The {path} path does not exist")
             if not stat.S_ISDIR(folder_stat.st_mode):
                 raise RuntimeError(f"The {path} path is not a folder")
+        logger.debug("Locking remote")
         lock_stat = None
         try:
             _test_folder(str(self.remote_read_path))
@@ -666,6 +674,7 @@ class Remote:
 
     def __exit__(self, exc_type, exc_value, exc_tb):
         if self.lockfile:
+            logger.debug("Unlocking remote")
             self.lockfile.close()
             self.sftp.remove(str(self.remote_write_path / LOCK_FILE_NAME))
 
@@ -675,6 +684,7 @@ class Storage:
         self.state_filename = str(self.state_path / server_name)
 
     def save_psync_info(self, local_data: dict, remote_data: dict):
+        logger.debug("Saving state")
         self.state_path.mkdir(parents=True, exist_ok=True)
         old_state_file_name = self.state_filename + OLD_FILE_SUFFIX
         new_state_file_name = self.state_filename + NEW_FILE_SUFFIX
@@ -687,6 +697,7 @@ class Storage:
             os.remove(old_state_file_name)
 
     def load_psync_info(self):
+        logger.debug("Loading state")
         self.state_path.mkdir(parents=True, exist_ok=True)
         # recovery
         old_state_file_name = self.state_filename + OLD_FILE_SUFFIX
