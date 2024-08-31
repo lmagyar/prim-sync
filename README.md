@@ -170,12 +170,12 @@ The first upload is better done over USB connection and manual copy, because cop
 The first run will be longer than a regular run, because without prior knowledge, the prim-sync script handles all files on both sides as newly created and compares them or their hash (hashing is much faster than downloading and comparing the content).
 
 On regular runs the meaning of the log lines are:
-- RECOVER - The previous run failed (probably network/connection problem), and there are intermediate/leftover files that are deleted on the next run.
-- INVALID - Invalid characters in the filename, can be replaced automatically.
-- HARDLNK - There are hardlinks on the destination side and --overwrite-destination command line option is not used.
-- CHANGED - The destination file changed after the decision is made to update it and before it replaced by the new content, this conflict will be handled on the next run.
 - Comparing, Hashing - Comparing the content or the hash of the files on the two sides.
 - <<< !!! >>> - Conflicting changes that are not resolved by any command line option, the details are in the next line.
+- RECOVER - The previous run failed (probably network/connection problem), and there are intermediate/leftover files that are deleted on the next run.
+- INVALID - Invalid characters in the filename are replaced because --valid-chars command line option is used.
+- HARDLNK - There are hardlinks on the destination side and --overwrite-destination command line option is not used.
+- CHANGED - The destination file changed after the decision is made to update it and before it replaced by the new content, this conflict will be handled on the next run.
 
 Notes:
 - File creation times (birthtime) are:

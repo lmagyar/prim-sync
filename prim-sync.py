@@ -10,7 +10,7 @@ import stat
 import sys
 from contextlib import suppress
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fnmatch import fnmatch
 from itertools import chain
 from pathlib import Path, PurePath, PurePosixPath
@@ -118,18 +118,18 @@ class Options():
     deletion_wins_over_change: bool = False
     local_wins_patterns: set[str] = field(default_factory=set)
     remote_wins_patterns: set[str] = field(default_factory=set)
-    valid_chars: dict = field(default_factory=dict)
+    valid_chars: dict | None = None
     dry: bool = False
     dry_on_conflict: bool = False
     overwrite_destination: bool = False
-    ignore_locks: bool = False
+    ignore_locks: int | None = None
 
     def __post_init__(self):
-        if any(c in self.valid_chars.values() for c in r'[]'):
+        if self.valid_chars and any(c in self.valid_chars.values() for c in r'[]'):
             raise ValueError("Can't use [ or ] characters in --valid-chars-pattern")
 
     def valid_filename(self, filename: str):
-        return ''.join([c if c not in self.valid_chars else self.valid_chars[c] for c in filename])
+        return ''.join([c if c not in self.valid_chars else self.valid_chars[c] for c in filename]) if self.valid_chars else filename
 
 options: Options
 
@@ -243,7 +243,6 @@ class LocalFileInfo(FileInfo):
 class Local:
     def __init__(self, local_path: str):
         self.local_path = PurePath(local_path)
-        self.has_invalid_filename = False
         self.has_unsupported_hardlink = False
 
     def scandir(self):
@@ -289,9 +288,6 @@ class Local:
                             logger.info("              renaming to: %s", valid_relative_name)
                             os.rename(self.local_path / relative_name, self.local_path / valid_relative_name)
                             relative_name = valid_relative_name
-                        else:
-                            logger.warning("<<< INVALID %s", relative_name)
-                            self.has_invalid_filename = True
                     if not options.overwrite_destination:
                         stat = entry.stat(follow_symlinks=False)
                         if stat.st_nlink > 1:
@@ -431,10 +427,24 @@ class Local:
             pass
 
     def __enter__(self):
+        def _get_stat(file_name: str):
+            try:
+                return os.stat(file_name)
+            except FileNotFoundError:
+                return None
+        stat = None
         try:
-            self.lockfile = open(str(self.local_path / LOCK_FILE_NAME), "x" if not options.ignore_locks else "w")
+            lock_file_name = str(self.local_path / LOCK_FILE_NAME)
+            if options.ignore_locks is not None:
+                stat = _get_stat(lock_file_name)
+            mode = "x" if options.ignore_locks is None or stat is None or (datetime.fromtimestamp(stat.st_mtime, timezone.utc) + timedelta(minutes=options.ignore_locks) > datetime.now(timezone.utc)) else "w"
+            self.lockfile = open(lock_file_name, mode)
         except IOError as e:
-            e.add_note(f"Can't acquire lock on local folder ({e}), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
+            e.add_note(f"Can't acquire lock on local folder ({e.filename} exists), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
+            if stat is None and options.ignore_locks is None:
+                stat = _get_stat(lock_file_name)
+            if stat is not None:
+                e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(stat.st_mtime).replace(microsecond=0)}")
             raise
         return self
 
@@ -449,8 +459,6 @@ class Remote:
         self.sftp = sftp
         self.remote_read_path = PurePosixPath(remote_read_path)
         self.remote_write_path = PurePosixPath(remote_write_path)
-
-    has_invalid_filename = False
 
     def scandir(self):
         def _scandir(path: PurePosixPath):
@@ -497,9 +505,6 @@ class Remote:
                             # you can rename these files, only writing them on SAF cause error
                             self.sftp.rename(str(self.remote_write_path / relative_name), str(self.remote_write_path / valid_relative_name))
                             relative_name = valid_relative_name
-                        else:
-                            logger.warning("INVALID >>> %s", relative_name)
-                            self.has_invalid_filename = True
                     yield relative_name, FileInfo(size=entry.st_size or 0, mtime=datetime.fromtimestamp(entry.st_mtime or 0, timezone.utc))
         yield from _scandir(PurePosixPath(''))
 
@@ -625,10 +630,24 @@ class Remote:
                 raise
 
     def __enter__(self):
+        def _get_stat(file_name: str):
+            try:
+                return self.sftp.stat(file_name)
+            except FileNotFoundError:
+                return None
+        stat = None
         try:
-            self.lockfile = self.sftp.open(str(self.remote_write_path / LOCK_FILE_NAME), "x" if not options.ignore_locks else "w")
+            lock_file_name = str(self.remote_write_path / LOCK_FILE_NAME)
+            if options.ignore_locks is not None:
+                stat = _get_stat(lock_file_name)
+            mode = "x" if options.ignore_locks is None or stat is None or stat.st_mtime is None or (datetime.fromtimestamp(stat.st_mtime, timezone.utc) + timedelta(minutes=options.ignore_locks) > datetime.now(timezone.utc)) else "w"
+            self.lockfile = self.sftp.open(lock_file_name, mode)
         except IOError as e:
-            e.add_note(f"Can't acquire lock on remote folder ({e}), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
+            e.add_note(f"Can't acquire lock on remote folder ({e} exists), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
+            if stat is None and options.ignore_locks is None:
+                stat = _get_stat(lock_file_name)
+            if stat is not None and stat.st_mtime:
+                e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(stat.st_mtime)}")
             raise
         return self
 
@@ -777,8 +796,6 @@ class Sync:
         self.local_current = dict(sorted(self.local.scandir()))
         self.remote_current = dict(sorted(self.remote.scandir()))
 
-        if self.local.has_invalid_filename or self.remote.has_invalid_filename:
-            raise RuntimeError("There are invalid filenames, can't sync, see --valid-chars or --valid-chars-pattern options")
         if self.local.has_unsupported_hardlink:
             raise RuntimeError("Hardlinks can't be used without enabling --overwrite-destination option")
 
@@ -1066,9 +1083,9 @@ def main():
         parser.add_argument('-a', '--address', nargs=2, metavar=('host', 'port') , help="if zeroconf is not used, then the address of the server (the host name is without '@' and ':')")
         parser.add_argument('-d', '--dry', help="no files changed in the synchronized folder(s), only internal state gets updated and temporary files gets cleaned up", default=False, action='store_true')
         parser.add_argument('-D', '--dry-on-conflict', help="in case of unresolved conflict(s), run dry", default=False, action='store_true')
-        parser.add_argument('-v', '--valid-chars', nargs='?', metavar="CHARS", help="replace invalid [] chars in SD card filenames with chars from CHARS (1 or 2 chars long, default is '()')", default='', const='()', action='store')
+        parser.add_argument('-v', '--valid-chars', nargs='?', metavar="CHARS", help="replace invalid [] chars in SD card filenames with chars from CHARS (1 or 2 chars long, default is '()')", default=None, const='()', action='store')
         parser.add_argument('--overwrite-destination', help="don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot", default=False, action='store_true')
-        parser.add_argument('--ignore-locks', help="ignore locks left over from previous run", default=False, action='store_true')
+        parser.add_argument('--ignore-locks', nargs='?', metavar="MINUTES", help="ignore locks left over from previous run, optionally only if they are older than MINUTES minutes", type=int, default=None, const=0, action='store')
 
         logging_group = parser.add_argument_group('logging')
         logging_group.add_argument('-t', '--timestamp', help="prefix each message with an UTC timestamp", default=False, action='store_true')
@@ -1107,7 +1124,7 @@ def main():
             newer_wins=args.newer_wins, older_wins=args.older_wins,
             change_wins_over_deletion=args.change_wins_over_deletion, deletion_wins_over_change=args.deletion_wins_over_change,
             local_wins_patterns=set(args.local_wins_patterns), remote_wins_patterns=set(args.remote_wins_patterns),
-            valid_chars=dict({k: v for k, v in zip(["[", "]"], [c for c in (args.valid_chars if len(args.valid_chars) >=2 else args.valid_chars + args.valid_chars)])}),
+            valid_chars=dict({k: v for k, v in zip(["[", "]"], [c for c in (args.valid_chars if len(args.valid_chars) >=2 else args.valid_chars + args.valid_chars)])}) if args.valid_chars else None,
             dry=args.dry, dry_on_conflict=args.dry_on_conflict,
             overwrite_destination=args.overwrite_destination,
             ignore_locks=args.ignore_locks
