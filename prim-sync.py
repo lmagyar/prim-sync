@@ -644,6 +644,7 @@ class Remote:
     def __enter__(self):
         def _get_stat(file_name: str):
             try:
+                logger.debug("SFTP stat on %s", file_name)
                 return self.sftp.stat(file_name)
             except IOError:
                 return None
@@ -662,6 +663,7 @@ class Remote:
             if options.ignore_locks is not None:
                 lock_stat = _get_stat(lock_file_name)
             mode = "x" if options.ignore_locks is None or lock_stat is None or lock_stat.st_mtime is None or (datetime.fromtimestamp(lock_stat.st_mtime, timezone.utc) + timedelta(minutes=options.ignore_locks) > datetime.now(timezone.utc)) else "w"
+            logger.debug("SFTP open on %s", lock_file_name)
             self.lockfile = self.sftp.open(lock_file_name, mode)
         except IOError as e:
             e.add_note(f"Can't acquire lock on remote folder (can't create {e}), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
@@ -674,9 +676,12 @@ class Remote:
 
     def __exit__(self, exc_type, exc_value, exc_tb):
         if self.lockfile:
+            lock_file_name = str(self.remote_write_path / LOCK_FILE_NAME)
             logger.debug("Unlocking remote")
+            logger.debug("SFTP close on %s", lock_file_name)
             self.lockfile.close()
-            self.sftp.remove(str(self.remote_write_path / LOCK_FILE_NAME))
+            logger.debug("SFTP remove on %s", lock_file_name)
+            self.sftp.remove(lock_file_name)
 
 class Storage:
     def __init__(self, local_path: str, server_name: str):
