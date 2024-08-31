@@ -846,7 +846,7 @@ class Sync:
         self.conflict = dict()
 
     def compare(self):
-        logger.info_header("----------- Analyzing changes")
+        logger.info_header("----------- Analyzing")
 
     def execute(self):
         def _filesize_fmt(num, suffix="B"):
