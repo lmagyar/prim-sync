@@ -1183,7 +1183,7 @@ def main():
                         logger.debug("Resolving %s (timeout is %d seconds)", service_name, timeout)
                         return service_resolver.get(service_name, timeout)
                     if args.address:
-                        ssh_connect(args.address[0], int(args.address[1]), 10)
+                        ssh_connect(args.address[0], int(args.address[1]), connect_timeout)
                     else:
                         host, port = service_cache.get(args.server_name)
                         if host and port:
@@ -1195,7 +1195,7 @@ def main():
                         host, port = service_resolver_get(args.server_name, resolve_timeout)
                         ssh_connect(host, port, connect_timeout)
                         service_cache.set(args.server_name, host, port)
-                connect(5, 30)
+                connect(10, 30)
                 with ssh.open_sftp() as sftp:
                     with Local(local_path) as local:
                         with Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote:
