@@ -432,19 +432,26 @@ class Local:
                 return os.stat(file_name)
             except FileNotFoundError:
                 return None
-        stat = None
+        def _test_folder(path: str):
+            folder_stat = _get_stat(path)
+            if folder_stat is None or folder_stat.st_mode is None:
+                raise RuntimeError(f"The {path} path does not exist")
+            if not stat.S_ISDIR(folder_stat.st_mode):
+                raise RuntimeError(f"The {path} path is not a folder")
+        lock_stat = None
         try:
+            _test_folder(str(self.local_path))
             lock_file_name = str(self.local_path / LOCK_FILE_NAME)
             if options.ignore_locks is not None:
-                stat = _get_stat(lock_file_name)
-            mode = "x" if options.ignore_locks is None or stat is None or (datetime.fromtimestamp(stat.st_mtime, timezone.utc) + timedelta(minutes=options.ignore_locks) > datetime.now(timezone.utc)) else "w"
+                lock_stat = _get_stat(lock_file_name)
+            mode = "x" if options.ignore_locks is None or lock_stat is None or (datetime.fromtimestamp(lock_stat.st_mtime, timezone.utc) + timedelta(minutes=options.ignore_locks) > datetime.now(timezone.utc)) else "w"
             self.lockfile = open(lock_file_name, mode)
         except IOError as e:
-            e.add_note(f"Can't acquire lock on local folder ({e.filename} exists), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
-            if stat is None and options.ignore_locks is None:
-                stat = _get_stat(lock_file_name)
-            if stat is not None:
-                e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(stat.st_mtime).replace(microsecond=0)}")
+            e.add_note(f"Can't acquire lock on local folder (can't create {e.filename}), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
+            if lock_stat is None and options.ignore_locks is None:
+                lock_stat = _get_stat(lock_file_name)
+            if lock_stat is not None:
+                e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(lock_stat.st_mtime).replace(microsecond=0)}")
             raise
         return self
 
@@ -633,21 +640,29 @@ class Remote:
         def _get_stat(file_name: str):
             try:
                 return self.sftp.stat(file_name)
-            except FileNotFoundError:
+            except IOError:
                 return None
-        stat = None
+        def _test_folder(path: str):
+            folder_stat = _get_stat(path)
+            if folder_stat is None or folder_stat.st_mode is None:
+                raise RuntimeError(f"The {path} path does not exist")
+            if not stat.S_ISDIR(folder_stat.st_mode):
+                raise RuntimeError(f"The {path} path is not a folder")
+        lock_stat = None
         try:
+            _test_folder(str(self.remote_read_path))
+            _test_folder(str(self.remote_write_path))
             lock_file_name = str(self.remote_write_path / LOCK_FILE_NAME)
             if options.ignore_locks is not None:
-                stat = _get_stat(lock_file_name)
-            mode = "x" if options.ignore_locks is None or stat is None or stat.st_mtime is None or (datetime.fromtimestamp(stat.st_mtime, timezone.utc) + timedelta(minutes=options.ignore_locks) > datetime.now(timezone.utc)) else "w"
+                lock_stat = _get_stat(lock_file_name)
+            mode = "x" if options.ignore_locks is None or lock_stat is None or lock_stat.st_mtime is None or (datetime.fromtimestamp(lock_stat.st_mtime, timezone.utc) + timedelta(minutes=options.ignore_locks) > datetime.now(timezone.utc)) else "w"
             self.lockfile = self.sftp.open(lock_file_name, mode)
         except IOError as e:
-            e.add_note(f"Can't acquire lock on remote folder ({e} exists), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
-            if stat is None and options.ignore_locks is None:
-                stat = _get_stat(lock_file_name)
-            if stat is not None and stat.st_mtime:
-                e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(stat.st_mtime)}")
+            e.add_note(f"Can't acquire lock on remote folder (can't create {e}), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
+            if lock_stat is None and options.ignore_locks is None:
+                lock_stat = _get_stat(lock_file_name)
+            if lock_stat is not None and lock_stat.st_mtime:
+                e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(lock_stat.st_mtime)}")
             raise
         return self
 
