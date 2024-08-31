@@ -10,7 +10,7 @@ Bidirectional and unidirectional sync over SFTP. Multiplatform Python script opt
 
 Why another sync solution? Because none of the professional solutions can write SD cards and follow local symlinks, or are extremely slow or full of bugs (Syncthing, Resilio Sync, rsync, osync, rclone, Unison). I gave up and wrote it.
 
-See my other project, https://github.com/lmagyar/prim-ctrl, for remote management of your phone's Tailscale VPN and Primitive FTPd SFTP server.
+See my other project, https://github.com/lmagyar/prim-ctrl, for remote management of your phone's Primitive FTPd SFTP server and optionally Tailscale VPN.
 
 ## Features
 
@@ -134,7 +134,7 @@ ssh-keygen -t ed25519 -f %USERPROFILE%\.ssh\id_ed25519_sftp -N ""
 Then install it in Primitive FTPd:
 - Use your favorite SFTP client (eg. WinSCP, FileZilla) to access the Primitive FTPd, use username/password to authenticate.
 - Open for editing the `/fs/storage/emulated/0/Android/data/org.primftpd/files/.ssh/authorized_keys` file.
-- Add the content of the previously generated `.ssh/id_ed25519_sftp.pub` file to it. It is something like "ssh-ed25519 XXXxxxXXXxxx you@your-device"
+- Append the content of the previously generated `.ssh/id_ed25519_sftp.pub` file to it. It is something like "ssh-ed25519 XXXxxxXXXxxx you@your-device"
 
 Then add your phone to the known_hosts file if your favorite SFTP client hasn't done it:
 - Use ssh to access the Primitive FTPd, use username/password to authenticate.
@@ -163,16 +163,17 @@ Then add your phone to the known_hosts file if your favorite SFTP client hasn't 
 
 ## Usage
 
-Create a backup of your files!!!
+Create a backup of your files!!! Really!!! If you use symlinks, this is only question of time when will you delete something unintendedly!!!
 
-The first upload is better done over USB connection and manual copy, because copying files over Wi-Fi is much slower. The prim-sync script handles this upload without problems and then handles the changes in the future.
+The first upload is better done over USB connection and manual copy, because copying files over Wi-Fi is much slower. The prim-sync script handles both this upload and the changes in the future.
 
-The first run will be longer than a regular run, because without prior knowledge, the prim-sync script handles all files on both sides as newly created and compares them or their hash (hashing is much faster than downloading and comparing the content).
+The first run will be longer than a regular run, because without prior knowledge, the prim-sync script handles all files on both sides as newly created and compares them or their hashes (hashing is much faster than downloading and comparing the content).
 
 On regular runs the meaning of the log lines are:
+- Scanning - Name of the remote folder that is scanned (only remote is logged, remote is the bottleneck)
 - Comparing, Hashing - Comparing the content or the hash of the files on the two sides.
 - <<< !!! >>> - Conflicting changes that are not resolved by any command line option, the details are in the next line.
-- RECOVER - The previous run failed (probably network/connection problem), and there are intermediate/leftover files that are deleted on the next run.
+- RECOVER - The previous run failed (probably network/connection problem), and there are intermediate/leftover files that are deleted on the next (ie. this) run.
 - INVALID - Invalid characters in the filename are replaced because --valid-chars command line option is used.
 - HARDLNK - There are hardlinks on the destination side and --overwrite-destination command line option is not used.
 - CHANGED - The destination file changed after the decision is made to update it and before it replaced by the new content, this conflict will be handled on the next run.
@@ -185,14 +186,14 @@ Notes:
 Options:
 
 ```
-usage: prim-sync.py [-h] [-s] [-t] [-ss] [-sh] [-M] [-C] [-H] [-n] [-o] [-cod] [-doc] [-l PATTERN [PATTERN ...]] [-r PATTERN [PATTERN ...]] [-v] [-V PATTERN] [-d] [-D] [--overwrite-destination] [--ignore-locks]
-                    host port keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
+usage: prim-sync.py [-h] [-a host port] [-d] [-D] [-v [CHARS]] [--overwrite-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H] [-n | -o] [-cod | -doc] [-l PATTERN [PATTERN ...]]
+                    [-r PATTERN [PATTERN ...]]
+                    server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
 
 Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the Primitive FTPd Android SFTP server (https://github.com/wolpi/prim-ftpd), for more details see https://github.com/lmagyar/prim-sync
 
 positional arguments:
-  host                               just the host name, without '@' and ':'; without name, use only fix, non-dynamic IPs
-  port
+  server-name                        unique name for the server (if zeroconf is used, then the Servername configuration option from Primitive FTPd, otherwise see the --address option also)
   keyfile                            key filename located under your .ssh folder
   local-prefix                       local path to the parent of the folder to be synchronized
   remote-read-prefix                 read-only remote path to the parent of the folder to be synchronized, eg. /fs/storage/XXXX-XXXX or /rosaf
@@ -202,31 +203,37 @@ positional arguments:
 
 options:
   -h, --help                         show this help message and exit
+  -a host port, --address host port  if zeroconf is not used, then the address of the server (the host name is without '@' and ':')
+  -d, --dry                          no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up
+  -D, --dry-on-conflict              in case of unresolved conflict(s), run dry
+  -v [CHARS], --valid-chars [CHARS]  replace invalid [] chars in SD card filenames with chars from CHARS (1 or 2 chars long, default is '()')
+  --overwrite-destination            don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot
+  --ignore-locks [MINUTES]           ignore locks left over from previous run, optionally only if they are older than MINUTES minutes
+
+logging:
+  -t, --timestamp                    prefix each message with a timestamp
   -s, --silent                       only errors printed
-  -t, --timestamp                    prefix each message with an UTC timestamp
   -ss, --silent-scanning             don't print scanned remote folders as progress indicator
   -sh, --silent-headers              don't print headers
+  --debug                            use debug level logging and add stack trace for exceptions, overrides the --silent option
+
+comparison:
   -M, --dont-use-mtime-for-comparison
-                                     beyond size, modification time or content must be equal, if both is disabled, only size is compared
+                                     beyond size, modification time or content must be equal, if both are disabled, only size is compared
   -C, --dont-use-content-for-comparison
-                                     beyond size, modification time or content must be equal, if both is disabled, only size is compared
+                                     beyond size, modification time or content must be equal, if both are disabled, only size is compared
   -H, --dont-use-hash-for-content-comparison
-                                     not all sftp servers support hashing, but downloading content is mush slower than hashing
+                                     not all sftp servers support hashing, but downloading content for comparison is mush slower than hashing
+
+conflict resolution:
   -n, --newer-wins                   in case of conflict, newer file wins
   -o, --older-wins                   in case of conflict, older file wins
   -cod, --change-wins-over-deletion  in case of conflict, changed/new file wins over deleted file
   -doc, --deletion-wins-over-change  in case of conflict, deleted file wins over changed/new file
   -l PATTERN [PATTERN ...], --local-wins-patterns PATTERN [PATTERN ...]
-                                     in case of conflict, local files matching this Unix shell pattern win, multiple values are allowed, separated by space
+                                     in case of conflict, local files matching this Unix shell PATTERN win, multiple values are allowed, separated by space
   -r PATTERN [PATTERN ...], --remote-wins-patterns PATTERN [PATTERN ...]
-                                     in case of conflict, remote files matching this Unix shell pattern win, multiple values are allowed, separated by space
-  -v, --valid-chars                  replace invalid [] sftp chars in filenames with ()
-  -V PATTERN, --valid-chars-pattern PATTERN
-                                     replace invalid [] sftp chars in filenames with chars from pattern (1 or 2 chars long)
-  -d, --dry                          no files changed in the synchronized folder(s), only internal state gets updated and temporary files gets cleaned up
-  -D, --dry-on-conflict              in case of unresolved conflict(s), run dry
-  --overwrite-destination            don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot
-  --ignore-locks                     ignore locks left over from previous run
+                                     in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space
 ```
 
 Some example:
@@ -234,16 +241,16 @@ Some example:
 <details><summary>Unix</summary>
 
 ```
-prim-sync.sh your.phone.host.name 2222 id_ed25519_sftp -t -sh -v "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
-prim-sync.sh your.phone.host.name 2222 id_ed25519_sftp -t -sh -v "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
-prim-sync.sh your.phone.host.name 2222 id_ed25519_sftp -t -sh -v "~/Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
+prim-sync.sh a-unique-serve-name id_ed25519_sftp -t -sh "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
+prim-sync.sh a-unique-serve-name id_ed25519_sftp -t -sh "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
+prim-sync.sh a-unique-serve-name id_ed25519_sftp -t -sh -a your.phone.host.name 2222 "~/Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
 ```
 </details>
 <details><summary>Windows</summary>
 
 ```
-prim-sync.cmd your.phone.host.name 2222 id_ed25519_sftp -t -sh -v "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
-prim-sync.cmd your.phone.host.name 2222 id_ed25519_sftp -t -sh -v "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
-prim-sync.cmd your.phone.host.name 2222 id_ed25519_sftp -t -sh -v "D:\Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
+prim-sync.cmd a-unique-serve-name id_ed25519_sftp -t -sh "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
+prim-sync.cmd a-unique-serve-name id_ed25519_sftp -t -sh "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
+prim-sync.cmd a-unique-serve-name id_ed25519_sftp -t -sh -a your.phone.host.name 2222 "D:\Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
 ```
 </details>

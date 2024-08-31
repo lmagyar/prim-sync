@@ -1081,23 +1081,23 @@ def main():
         parser.add_argument('remote_folder', metavar='remote-folder', help="the remote folder name to be synchronized (you can use * if this is the same as the local folder name above)")
 
         parser.add_argument('-a', '--address', nargs=2, metavar=('host', 'port') , help="if zeroconf is not used, then the address of the server (the host name is without '@' and ':')")
-        parser.add_argument('-d', '--dry', help="no files changed in the synchronized folder(s), only internal state gets updated and temporary files gets cleaned up", default=False, action='store_true')
+        parser.add_argument('-d', '--dry', help="no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up", default=False, action='store_true')
         parser.add_argument('-D', '--dry-on-conflict', help="in case of unresolved conflict(s), run dry", default=False, action='store_true')
         parser.add_argument('-v', '--valid-chars', nargs='?', metavar="CHARS", help="replace invalid [] chars in SD card filenames with chars from CHARS (1 or 2 chars long, default is '()')", default=None, const='()', action='store')
         parser.add_argument('--overwrite-destination', help="don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot", default=False, action='store_true')
         parser.add_argument('--ignore-locks', nargs='?', metavar="MINUTES", help="ignore locks left over from previous run, optionally only if they are older than MINUTES minutes", type=int, default=None, const=0, action='store')
 
         logging_group = parser.add_argument_group('logging')
-        logging_group.add_argument('-t', '--timestamp', help="prefix each message with an UTC timestamp", default=False, action='store_true')
+        logging_group.add_argument('-t', '--timestamp', help="prefix each message with a timestamp", default=False, action='store_true')
         logging_group.add_argument('-s', '--silent', help="only errors printed", default=False, action='store_true')
         logging_group.add_argument('-ss', '--silent-scanning', help="don't print scanned remote folders as progress indicator", default=False, action='store_true')
         logging_group.add_argument('-sh', '--silent-headers', help="don't print headers", default=False, action='store_true')
         logging_group.add_argument('--debug', help="use debug level logging and add stack trace for exceptions, overrides the --silent option", default=False, action='store_true')
 
         comparison_group = parser.add_argument_group('comparison')
-        comparison_group.add_argument('-M', '--dont-use-mtime-for-comparison', dest="use_mtime_for_comparison", help="beyond size, modification time or content must be equal, if both is disabled, only size is compared", default=True, action='store_false')
-        comparison_group.add_argument('-C', '--dont-use-content-for-comparison', dest="use_content_for_comparison", help="beyond size, modification time or content must be equal, if both is disabled, only size is compared", default=True, action='store_false')
-        comparison_group.add_argument('-H', '--dont-use-hash-for-content-comparison', dest="use_hash_for_content_comparison", help="not all sftp servers support hashing, but downloading content is mush slower than hashing", default=True, action='store_false')
+        comparison_group.add_argument('-M', '--dont-use-mtime-for-comparison', dest="use_mtime_for_comparison", help="beyond size, modification time or content must be equal, if both are disabled, only size is compared", default=True, action='store_false')
+        comparison_group.add_argument('-C', '--dont-use-content-for-comparison', dest="use_content_for_comparison", help="beyond size, modification time or content must be equal, if both are disabled, only size is compared", default=True, action='store_false')
+        comparison_group.add_argument('-H', '--dont-use-hash-for-content-comparison', dest="use_hash_for_content_comparison", help="not all sftp servers support hashing, but downloading content for comparison is mush slower than hashing", default=True, action='store_false')
 
         conflict_resolution_group = parser.add_argument_group('conflict resolution')
         conflict_resolution_newer_older_group = conflict_resolution_group.add_mutually_exclusive_group()
