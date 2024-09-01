@@ -23,6 +23,7 @@ from zeroconf import Zeroconf
 ########
 
 LOCK_FILE_NAME = '.prim-sync.lock'
+LOCK_FILE_SUFFIX = '.lock'
 STATE_DIR_NAME = '.prim-sync'
 NEW_FILE_SUFFIX = '.prim-sync.new' # new, tmp and old suffixes have to be the same length
 TMP_FILE_SUFFIX = '.prim-sync.tmp' # new, tmp and old suffixes have to be the same length
@@ -119,6 +120,7 @@ class Options():
     local_wins_patterns: set[str] = field(default_factory=set)
     remote_wins_patterns: set[str] = field(default_factory=set)
     valid_chars: dict | None = None
+    remote_state_prefix: str | None = None
     dry: bool = False
     dry_on_conflict: bool = False
     overwrite_destination: bool = False
@@ -432,16 +434,16 @@ class Local:
                 return os.stat(file_name)
             except FileNotFoundError:
                 return None
-        def _test_folder(path: str):
+        def _test_file_folder(path: str):
             folder_stat = _get_stat(path)
-            if folder_stat is None or folder_stat.st_mode is None:
+            if folder_stat is None:
                 raise RuntimeError(f"The {path} path does not exist")
-            if not stat.S_ISDIR(folder_stat.st_mode):
+            elif folder_stat.st_mode is None or not stat.S_ISDIR(folder_stat.st_mode):
                 raise RuntimeError(f"The {path} path is not a folder")
         logger.debug("Locking local")
         lock_stat = None
         try:
-            _test_folder(str(self.local_path))
+            _test_file_folder(str(self.local_path))
             lock_file_name = str(self.local_path / LOCK_FILE_NAME)
             if options.ignore_locks is not None:
                 lock_stat = _get_stat(lock_file_name)
@@ -637,6 +639,17 @@ class Remote:
             else:
                 raise
 
+    def _lock_file_name(self):
+        def _remove_first_slash(path: str):
+            return path[1:] if path.startswith('/') else path
+        if not options.remote_state_prefix:
+            return (None, str(self.remote_write_path / LOCK_FILE_NAME))
+        else:
+            lock_parent_folder = PurePosixPath(options.remote_state_prefix)
+            lock_folder = lock_parent_folder / STATE_DIR_NAME
+            lock_file_name = lock_folder / _remove_first_slash(str(self.remote_write_path) + LOCK_FILE_SUFFIX).replace('/', '#')
+            return (str(lock_folder), str(lock_file_name))
+
     def __enter__(self):
         def _get_stat(file_name: str):
             try:
@@ -646,16 +659,26 @@ class Remote:
                 return None
         def _test_folder(path: str):
             folder_stat = _get_stat(path)
-            if folder_stat is None or folder_stat.st_mode is None:
-                raise RuntimeError(f"The {path} path does not exist")
-            if not stat.S_ISDIR(folder_stat.st_mode):
+            if folder_stat is None:
+                return False
+            elif folder_stat.st_mode is None or not stat.S_ISDIR(folder_stat.st_mode):
                 raise RuntimeError(f"The {path} path is not a folder")
+            else:
+                return True
+        def _test_file_folder(path: str):
+            if not _test_folder(path):
+                raise RuntimeError(f"The {path} path does not exist")
+        def _test_lock_folder(path: str):
+            if not _test_folder(path):
+                self.sftp.mkdir(path)
         logger.debug("Locking remote")
         lock_stat = None
         try:
-            _test_folder(str(self.remote_read_path))
-            _test_folder(str(self.remote_write_path))
-            lock_file_name = str(self.remote_write_path / LOCK_FILE_NAME)
+            _test_file_folder(str(self.remote_read_path))
+            _test_file_folder(str(self.remote_write_path))
+            lock_folder, lock_file_name = self._lock_file_name()
+            if lock_folder:
+                _test_lock_folder(lock_folder)
             if options.ignore_locks is not None:
                 lock_stat = _get_stat(lock_file_name)
             mode = "x" if options.ignore_locks is None or lock_stat is None or lock_stat.st_mtime is None or (datetime.fromtimestamp(lock_stat.st_mtime, timezone.utc) + timedelta(minutes=options.ignore_locks) > datetime.now(timezone.utc)) else "w"
@@ -672,8 +695,8 @@ class Remote:
 
     def __exit__(self, exc_type, exc_value, exc_tb):
         if self.lockfile:
-            lock_file_name = str(self.remote_write_path / LOCK_FILE_NAME)
             logger.debug("Unlocking remote")
+            _lock_folder, lock_file_name = self._lock_file_name()
             logger.debug("SFTP close on %s", lock_file_name)
             self.lockfile.close()
             logger.debug("SFTP remove on %s", lock_file_name)
@@ -1109,6 +1132,7 @@ def main():
         parser.add_argument('-d', '--dry', help="no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up", default=False, action='store_true')
         parser.add_argument('-D', '--dry-on-conflict', help="in case of unresolved conflict(s), run dry", default=False, action='store_true')
         parser.add_argument('-v', '--valid-chars', nargs='?', metavar="CHARS", help="replace invalid [] chars in SD card filenames with chars from CHARS (1 or 2 chars long, default is '()')", default=None, const='()', action='store')
+        parser.add_argument('-rs', '--remote-state-prefix', metavar="PATH", help="stores remote state in a .prim-sync folder under PATH instead of under the remote-folder argument (usefull for slow SD cards), eg. /fs/storage/emulated/0")
         parser.add_argument('--overwrite-destination', help="don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot", default=False, action='store_true')
         parser.add_argument('--ignore-locks', nargs='?', metavar="MINUTES", help="ignore locks left over from previous run, optionally only if they are older than MINUTES minutes", type=int, default=None, const=0, action='store')
 
@@ -1150,6 +1174,7 @@ def main():
             change_wins_over_deletion=args.change_wins_over_deletion, deletion_wins_over_change=args.deletion_wins_over_change,
             local_wins_patterns=set(args.local_wins_patterns), remote_wins_patterns=set(args.remote_wins_patterns),
             valid_chars=dict({k: v for k, v in zip(["[", "]"], [c for c in (args.valid_chars if len(args.valid_chars) >=2 else args.valid_chars + args.valid_chars)])}) if args.valid_chars else None,
+            remote_state_prefix=args.remote_state_prefix,
             dry=args.dry, dry_on_conflict=args.dry_on_conflict,
             overwrite_destination=args.overwrite_destination,
             ignore_locks=args.ignore_locks

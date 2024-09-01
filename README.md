@@ -186,7 +186,7 @@ Notes:
 Options:
 
 ```
-usage: prim-sync.py [-h] [-a host port] [-d] [-D] [-v [CHARS]] [--overwrite-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H] [-n | -o] [-cod | -doc] [-l PATTERN [PATTERN ...]]
+usage: prim-sync.py [-h] [-a host port] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H] [-n | -o] [-cod | -doc] [-l PATTERN [PATTERN ...]]
                     [-r PATTERN [PATTERN ...]]
                     server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
 
@@ -207,6 +207,8 @@ options:
   -d, --dry                          no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up
   -D, --dry-on-conflict              in case of unresolved conflict(s), run dry
   -v [CHARS], --valid-chars [CHARS]  replace invalid [] chars in SD card filenames with chars from CHARS (1 or 2 chars long, default is '()')
+  -rs PATH, --remote-state-prefix PATH
+                                     stores remote state in a .prim-sync folder under PATH instead of under the remote-folder argument (usefull for slow SD cards), eg. /fs/storage/emulated/0
   --overwrite-destination            don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot
   --ignore-locks [MINUTES]           ignore locks left over from previous run, optionally only if they are older than MINUTES minutes
 
