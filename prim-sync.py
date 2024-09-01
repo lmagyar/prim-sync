@@ -1131,8 +1131,8 @@ def main():
         conflict_resolution_change_deletion_group = conflict_resolution_group.add_mutually_exclusive_group()
         conflict_resolution_change_deletion_group.add_argument('-cod', '--change-wins-over-deletion', help="in case of conflict, changed/new file wins over deleted file", default=False, action='store_true')
         conflict_resolution_change_deletion_group.add_argument('-doc', '--deletion-wins-over-change', help="in case of conflict, deleted file wins over changed/new file", default=False, action='store_true')
-        conflict_resolution_group.add_argument('-l', '--local-wins-patterns', metavar="PATTERN", help="in case of conflict, local files matching this Unix shell PATTERN win, multiple values are allowed, separated by space", type=str, nargs='+', default=[])
-        conflict_resolution_group.add_argument('-r', '--remote-wins-patterns', metavar="PATTERN", help="in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space", type=str, nargs='+', default=[])
+        conflict_resolution_group.add_argument('-l', '--local-wins-patterns', nargs='+', metavar="PATTERN", help="in case of conflict, local files matching this Unix shell PATTERN win, multiple values are allowed, separated by space", default=[])
+        conflict_resolution_group.add_argument('-r', '--remote-wins-patterns', nargs='+', metavar="PATTERN", help="in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space", default=[])
 
         args = parser.parse_args()
 
