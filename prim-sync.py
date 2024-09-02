@@ -1141,7 +1141,7 @@ def main():
         logging_group.add_argument('-s', '--silent', help="only errors printed", default=False, action='store_true')
         logging_group.add_argument('-ss', '--silent-scanning', help="don't print scanned remote folders as progress indicator", default=False, action='store_true')
         logging_group.add_argument('-sh', '--silent-headers', help="don't print headers", default=False, action='store_true')
-        logging_group.add_argument('--debug', help="use debug level logging and add stack trace for exceptions, overrides the --silent option", default=False, action='store_true')
+        logging_group.add_argument('--debug', help="use debug level logging and add stack trace for exceptions, disables the --silent and enables the --timestamp options", default=False, action='store_true')
 
         comparison_group = parser.add_argument_group('comparison')
         comparison_group.add_argument('-M', '--dont-use-mtime-for-comparison', dest="use_mtime_for_comparison", help="beyond size, modification time or content must be equal, if both are disabled, only size is compared", default=True, action='store_false')
@@ -1162,7 +1162,7 @@ def main():
 
         if args.debug:
             logger.setLevel(logging.DEBUG)
-        logger.prepare(args.timestamp, args.silent, args.silent_scanning, args.silent_headers)
+        logger.prepare(args.timestamp or args.debug, args.silent, args.silent_scanning, args.silent_headers)
 
         if args.address and any(c in args.address[0] for c in r'/@:'):
             raise ValueError("Host name can't contain '/@:' characters")

@@ -221,7 +221,7 @@ logging:
   -s, --silent                       only errors printed
   -ss, --silent-scanning             don't print scanned remote folders as progress indicator
   -sh, --silent-headers              don't print headers
-  --debug                            use debug level logging and add stack trace for exceptions, overrides the --silent option
+  --debug                            use debug level logging and add stack trace for exceptions, disables the --silent and enables the --timestamp options
 
 comparison:
   -M, --dont-use-mtime-for-comparison
