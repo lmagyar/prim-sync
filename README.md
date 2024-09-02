@@ -109,7 +109,9 @@ Either use the built-in zeroconf (DNS-SD) functionality in Primitive FTPd (see b
       - Servername: make it unique, even if you don't use zeroconf, especially when multiple phones are synced, because this will be used as unique identifier to store the per-device-sync-state between runs
       - SFTP Hostkey algorithms: enable at least ed25519
       - Other options can be left unchanged
-- Close and restart the whole app, not just stop/start the server
+- Stop the server (if you have started)
+- Close and restart the whole app
+- Start the server
 
 ### SSH keys
 
@@ -159,7 +161,9 @@ Then add your phone to the known_hosts file if your favorite SFTP client hasn't 
   - Authentication
       - Password: delete it
       - Public Key Authentication: enable
-- Close and restart the whole app, not just stop/start the server
+- Stop the server
+- Close and restart the whole app
+- Start the server
 
 ## Usage
 
