@@ -212,7 +212,9 @@ options:
   -D, --dry-on-conflict              in case of unresolved conflict(s), run dry
   -v [CHARS], --valid-chars [CHARS]  replace invalid [] chars in SD card filenames with chars from CHARS (1 or 2 chars long, default is '()')
   -rs PATH, --remote-state-prefix PATH
-                                     stores remote state in a .prim-sync folder under PATH instead of under the remote-folder argument (usefull for slow SD cards), eg. /fs/storage/emulated/0
+                                     stores remote state in a common .prim-sync folder under PATH instead of under the remote-folder argument (decreases SD card wear), eg. /fs/storage/emulated/0
+                                     Note: currently only the .lock file is stored here
+                                     Note: if you access the same server from multiple clients, you have to specify the same --remote-state-prefix option everywhere to prevent concurrent access
   --overwrite-destination            don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot
   --ignore-locks [MINUTES]           ignore locks left over from previous run, optionally only if they are older than MINUTES minutes
 
