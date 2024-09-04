@@ -1,8 +1,12 @@
 
 > [!CAUTION]
-> ***This repository is in alpha and currently works only with my modified version of [Primitive FTPd Android SFTP server](https://github.com/wolpi/prim-ftpd)!***
-> - ***use my fork at https://github.com/lmagyar/prim-ftpd***
-> - ***or wait until the new features got merged into Primitive FTPd (see: [#349](https://github.com/wolpi/prim-ftpd/pull/349) [#350](https://github.com/wolpi/prim-ftpd/pull/350) [#360](https://github.com/wolpi/prim-ftpd/pull/360) [#371](https://github.com/wolpi/prim-ftpd/pull/371) [#372](https://github.com/wolpi/prim-ftpd/pull/372) [#373](https://github.com/wolpi/prim-ftpd/pull/373) [#376](https://github.com/wolpi/prim-ftpd/pull/376))***
+> ***This repository is in alpha***
+
+> [!WARNING]
+> ***This repository currently works much better with my modified version of the Primitive FTPd Android SFTP server!***
+> - ***install my fork from https://github.com/lmagyar/prim-ftpd - and use all the new features and bugfixes***
+> - ***install the original version from https://github.com/wolpi/prim-ftpd - and disable hashing (-H option), and be patient with the extreme slow SD card access (SAF)***
+> - ***or wait until the new features got merged into the original version, for the PR's statuses see https://github.com/wolpi/prim-ftpd/pulls/lmagyar***
 
 # Primitive Sync
 
