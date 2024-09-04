@@ -944,15 +944,18 @@ class Sync:
                         logger.info("< CHANGED >   will be processed only on the next run")
 
         for relative_path, reason in sorted(self.conflict.items(), key=lambda p: (p.count('/'), p)):
-            def extend_reason():
+            def _extended_reason():
+                def _extended_reason_compare(left_fileinfo: FileInfo, right_fileinfo: FileInfo):
+                    return (
+                        f", size: {_filesize_fmt(left_fileinfo.size)} ({format(left_fileinfo.size, ',d').replace(',',' ')}) "
+                            f"{'>' if left_fileinfo.size > right_fileinfo.size else '<' if left_fileinfo.size < right_fileinfo.size else '='} "
+                            f"{_filesize_fmt(right_fileinfo.size)} ({format(right_fileinfo.size, ',d').replace(',',' ')})"
+                        f", time: {left_fileinfo.mtime} {'>' if left_fileinfo.mtime > right_fileinfo.mtime else '<' if left_fileinfo.mtime < right_fileinfo.mtime else '='} {right_fileinfo.mtime}")
                 extended_reason = f"              {reason}"
                 local_fileinfo = self.local_current.get(relative_path)
                 remote_fileinfo = self.remote_current.get(relative_path)
                 if local_fileinfo and remote_fileinfo:
-                    extended_reason += (f", size: {_filesize_fmt(local_fileinfo.size)} ({format(local_fileinfo.size, ',d').replace(',',' ')}) "
-                        f"{'>' if local_fileinfo.size > remote_fileinfo.size else '<' if local_fileinfo.size < remote_fileinfo.size else '='} "
-                        f"{_filesize_fmt(remote_fileinfo.size)} ({format(remote_fileinfo.size, ',d').replace(',',' ')})"
-                        f", time: {local_fileinfo.mtime} {'>' if local_fileinfo.mtime > remote_fileinfo.mtime else '<' if local_fileinfo.mtime < remote_fileinfo.mtime else '='} {remote_fileinfo.mtime}")
+                    extended_reason += _extended_reason_compare(local_fileinfo, remote_fileinfo)
                 else:
                     if local_fileinfo:
                         fileinfo = local_fileinfo
@@ -961,13 +964,12 @@ class Sync:
                         fileinfo = remote_fileinfo
                         previous_fileinfo = self.remote_previous.get(relative_path)
                     if fileinfo and previous_fileinfo:
-                        extended_reason += (f", size: {_filesize_fmt(previous_fileinfo.size)} ({format(previous_fileinfo.size, ',d').replace(',',' ')}) -> {_filesize_fmt(fileinfo.size)} ({format(fileinfo.size, ',d').replace(',',' ')})"
-                            f", time: {previous_fileinfo.mtime} -> {fileinfo.mtime}")
+                        extended_reason += _extended_reason_compare(previous_fileinfo, fileinfo)
                     elif fileinfo:
                         extended_reason += f", size: {_filesize_fmt(fileinfo.size)} ({format(fileinfo.size, ',d').replace(',',' ')}), time: {fileinfo.mtime}"
                 return extended_reason
             logger.warning("<<< !!! >>> %s", relative_path)
-            logger.warning(LazyStr(extend_reason))
+            logger.warning(LazyStr(_extended_reason))
             _forget_changes(self.local_current, self.local_previous, relative_path)
             _forget_changes(self.remote_current, self.remote_previous, relative_path)
 
