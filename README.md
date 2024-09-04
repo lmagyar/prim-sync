@@ -14,7 +14,7 @@ Bidirectional and unidirectional sync over SFTP. Multiplatform Python script opt
 
 Why another sync solution? Because none of the professional solutions can write SD cards and follow local symlinks, or are extremely slow or full of bugs (Syncthing, Resilio Sync, rsync, osync, rclone, Unison). I gave up and wrote it.
 
-See my other project, https://github.com/lmagyar/prim-ctrl, for remote management of your phone's Primitive FTPd SFTP server and optionally Tailscale VPN.
+See my other project, https://github.com/lmagyar/prim-ctrl, for remote control of your phone's Primitive FTPd SFTP server and optionally Tailscale VPN.
 
 ## Features
 
@@ -253,16 +253,16 @@ Some example:
 <details><summary>Unix</summary>
 
 ```
-prim-sync.sh a-unique-serve-name id_ed25519_sftp -t -sh "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
-prim-sync.sh a-unique-serve-name id_ed25519_sftp -t -sh "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
-prim-sync.sh a-unique-serve-name id_ed25519_sftp -t -sh -a your.phone.host.name 2222 "~/Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
+prim-sync.sh a-unique-server-name id_ed25519_sftp -t -sh "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
+prim-sync.sh a-unique-server-name id_ed25519_sftp -t -sh "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
+prim-sync.sh a-unique-server-name id_ed25519_sftp -t -sh -a your.phone.host.name 2222 "~/Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
 ```
 </details>
 <details><summary>Windows</summary>
 
 ```
-prim-sync.cmd a-unique-serve-name id_ed25519_sftp -t -sh "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
-prim-sync.cmd a-unique-serve-name id_ed25519_sftp -t -sh "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
-prim-sync.cmd a-unique-serve-name id_ed25519_sftp -t -sh -a your.phone.host.name 2222 "D:\Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
+prim-sync.cmd a-unique-server-name id_ed25519_sftp -t -sh "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
+prim-sync.cmd a-unique-server-name id_ed25519_sftp -t -sh "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
+prim-sync.cmd a-unique-server-name id_ed25519_sftp -t -sh -a your.phone.host.name 2222 "D:\Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
 ```
 </details>
