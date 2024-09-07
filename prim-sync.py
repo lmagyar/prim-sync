@@ -1133,7 +1133,8 @@ def main():
         parser.add_argument('-a', '--address', nargs=2, metavar=('host', 'port') , help="if zeroconf is not used, then the address of the server (the host name is without '@' and ':')")
         parser.add_argument('-d', '--dry', help="no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up", default=False, action='store_true')
         parser.add_argument('-D', '--dry-on-conflict', help="in case of unresolved conflict(s), run dry", default=False, action='store_true')
-        parser.add_argument('-v', '--valid-chars', nargs='?', metavar="CHARS", help="replace invalid [] chars in SD card filenames with chars from CHARS (1 or 2 chars long, default is '()')", default=None, const='()', action='store')
+        parser.add_argument('-v', '--valid-chars', nargs='?', metavar="CHARS", help="replace [] chars in filenames with chars from CHARS (1 or 2 chars long, default is '()')\n"
+                            "Note: this is required only for the original Primitive FTPd SAF SD card access, will be removed", default=None, const='()', action='store')
         parser.add_argument('-rs', '--remote-state-prefix', metavar="PATH", help="stores remote state in a common .prim-sync folder under PATH instead of under the remote-folder argument (decreases SD card wear), eg. /fs/storage/emulated/0\n"
                             "Note: currently only the .lock file is stored here\n"
                             "Note: if you access the same server from multiple clients, you have to specify the same --remote-state-prefix option everywhere to prevent concurrent access")

@@ -5,7 +5,7 @@
 > [!WARNING]
 > ***This repository currently works much better with my modified version of the Primitive FTPd Android SFTP server!***
 > - ***install my fork from https://github.com/lmagyar/prim-ftpd - and use all the new features and bugfixes***
-> - ***install the original version from https://github.com/wolpi/prim-ftpd - and disable hashing (-H option), and be patient with the extreme slow SD card access (SAF)***
+> - ***install the original version from https://github.com/wolpi/prim-ftpd - and disable hashing (-H option), enable file rename (-v option), and be patient with the extreme slow SD card access (SAF)***
 > - ***or wait until the new features got merged into the original version, for the PR's statuses see https://github.com/wolpi/prim-ftpd/pulls/lmagyar***
 
 # Primitive Sync
@@ -20,20 +20,19 @@ See my other project, https://github.com/lmagyar/prim-ctrl, for remote control o
 
 - Follow local symlinks
 - Hash files for fast comparison ***( !!! currently requires the forked Primitive FTPd !!! )***
-- Write SD card (with Primitive FTPd and Storage Access Framework)
-- Dual access in case of SD card (read-only plain-old file-system for fast scan and download and writing with the slower Storage Access Framework)
-- Failsafe, restartable operation (costs some time, remote renames on SD card are slow)
-- Automatically replace `[` and `]` chars (that are invalid for SD card and Storage Access Framework)
+- Write SD card (with Primitive FTPd and Storage Access Framework) ***( !!! fast operation currently requires the forked Primitive FTPd !!! )***
+- Dual access in case of SD card (reading plain-old file-system for fast scan and download and writing with the slower Storage Access Framework)
+- Failsafe, restartable operation (costs some time, renames on SD card are slow)
 
 #### Notes on following local symlinks
 
 - File symlinks just work
 - File hardlinks are OK for unidirectional outward sync, but have to use --overwrite-destination option in case of bidirectional or unidirectional inward sync
   - Better not to use file hardlinks, use symlinks
-- Folder symlinks or junctions are OK for unidirectional outward sync, but be ***very-very-very*** careful with bidirectional or unidirectional inward sync
+- Folder symlinks or junctions are OK for unidirectional outward sync, but be **very-very-very** careful with bidirectional or unidirectional inward sync
   - If you have a folder symlink and you think you delete files on your phone under the symlinked folder, or even you delete the symlinked folder, because "they are only under a symlink", you shoot yourself in the foot
   - Syncing file deletions means file deletions synced first, then the containing folder deletion synced
-  - So first all the files will be deleted in the symlink ***target*** folder, then the folder symlink itself will be deleted, though the target folder is not deleted
+  - So first all the files will be deleted in the symlink **target** folder, then the folder symlink itself will be deleted, though the target folder is not deleted
   - So symlinking the family picture albums' folder better done with an unidirectional outward sync
   - Or symlink only the files if you enable deletion on the phone
   - You have been warned!
@@ -41,7 +40,7 @@ See my other project, https://github.com/lmagyar/prim-ctrl, for remote control o
 ## Installation
 
 You need to install:
-- Primitive FTPd on your phone - see: https://github.com/wolpi/prim-ftpd ***use the F-Droid version!***
+- Primitive FTPd on your phone - see: https://github.com/wolpi/prim-ftpd **use the F-Droid version!**
 - Python 3.12+, pip and venv - see: https://www.python.org/downloads/ or
   <details><summary>Unix</summary>
 
@@ -91,28 +90,28 @@ Either use the built-in zeroconf (DNS-SD) functionality in Primitive FTPd (see b
 
 ### Primitive FTPd
 
-- Home tab:
+- Home tab
   - Select "Virtual folders" and follow the relevant [Readme section](https://github.com/wolpi/prim-ftpd#external-sd-card-readwrite-access---android-storage-access-framework)
-- Configuration tab:
+- Configuration tab
   - Authentication
-      - Anonymous Login: disable
-      - Username/Password: eg. sftp/sftp (will be disabled)
-      - Public Key Authentication: disable (will be enabled)
+    - Anonymous Login: disable
+    - Username/Password: eg. sftp/sftp (will be disabled)
+    - Public Key Authentication: disable (will be enabled)
   - Connectivity
-      - Server(s) to be started: SFTP only
-      - Secure Port: eg. 2222
-      - Server Idle Timeout: 0
-      - Idle timeout to stop server: eg. 60 or 0
-      - Allowed IPs pattern, IP to bind to: at first leave them empty, you can harden your security later
+    - Server(s) to be started: SFTP only
+    - Secure Port: eg. 2222
+    - Server Idle Timeout: 0
+    - Idle timeout to stop server: eg. 60 or 0
+    - Allowed IPs pattern, IP to bind to: at first leave them empty, you can harden your security later
   - UI
-      - This is based on your preferences
+    - This is based on your preferences
   - System
-      - Server Start Directory: /storage/emulated/0
-      - Prevent Standby: enable
-      - Announce server in LAN: enable if you use zeroconf (DNS-SD)
-      - Servername: make it unique, even if you don't use zeroconf, especially when multiple phones are synced, because this will be used as unique identifier to store the per-device-sync-state between runs
-      - SFTP Hostkey algorithms: enable at least ed25519
-      - Other options can be left unchanged
+    - Server Start Directory: /storage/emulated/0
+    - Prevent Standby: enable
+    - Announce server in LAN: enable if you use zeroconf (DNS-SD)
+    - Servername: make it unique, even if you don't use zeroconf, especially when multiple phones are synced, because this will be used as unique identifier to store the per-device-sync-state between runs
+    - SFTP Hostkey algorithms: enable at least ed25519
+    - Other options can be left unchanged
 - Stop the server (if you have started)
 - Close and restart the whole app
 - Start the server
@@ -190,8 +189,10 @@ Notes:
 - File creation times (birthtime) are:
   - preserved on Windows but not on Unix when the default restartable operation is used
   - unchanged when --overwrite-destination option is used
+- You can brainwash (ie. delete the state under the .prim-sync folder) between two runs. After this, the script will behave, as if the next run is the first run (see "first run" above).
+- Never ever delete any files where the name ends with .prim-sync.new or .tmp or .old, the pure existence of these files are the "transaction state", if you delete any of these files, the recovery algorythm won't be able to figure out in which phase got the restartable operation interrupted. If you delete any of these files, you are on your own to figure out how to recover from the interruption.
 
-Options:
+### Options
 
 ```
 usage: prim-sync.py [-h] [-a host port] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H] [-n | -o] [-cod | -doc] [-l PATTERN [PATTERN ...]]
@@ -214,7 +215,8 @@ options:
   -a host port, --address host port  if zeroconf is not used, then the address of the server (the host name is without '@' and ':')
   -d, --dry                          no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up
   -D, --dry-on-conflict              in case of unresolved conflict(s), run dry
-  -v [CHARS], --valid-chars [CHARS]  replace invalid [] chars in SD card filenames with chars from CHARS (1 or 2 chars long, default is '()')
+  -v [CHARS], --valid-chars [CHARS]  replace [] chars in filenames with chars from CHARS (1 or 2 chars long, default is '()')
+                                     Note: this is required only for the original Primitive FTPd SAF SD card access, will be removed
   -rs PATH, --remote-state-prefix PATH
                                      stores remote state in a common .prim-sync folder under PATH instead of under the remote-folder argument (decreases SD card wear), eg. /fs/storage/emulated/0
                                      Note: currently only the .lock file is stored here
@@ -248,7 +250,7 @@ conflict resolution:
                                      in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space
 ```
 
-Some example:
+### Some example
 
 <details><summary>Unix</summary>
 
