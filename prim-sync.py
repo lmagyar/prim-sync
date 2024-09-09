@@ -1187,7 +1187,7 @@ def main():
         parser.add_argument('local_folder', metavar='local-folder', help="the local folder name to be synchronized")
         parser.add_argument('remote_folder', metavar='remote-folder', help="the remote folder name to be synchronized (you can use * if this is the same as the local folder name above)")
 
-        parser.add_argument('-a', '--address', nargs=2, metavar=('host', 'port') , help="if zeroconf is not used, then the address of the server (the host name is without '@' and ':')")
+        parser.add_argument('-a', '--address', nargs=2, metavar=('host', 'port') , help="if zeroconf is not used, then the address of the server")
         parser.add_argument('-d', '--dry', help="no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up", default=False, action='store_true')
         parser.add_argument('-D', '--dry-on-conflict', help="in case of unresolved conflict(s), run dry", default=False, action='store_true')
         parser.add_argument('-v', '--valid-chars', nargs='?', metavar="CHARS", help="replace [] chars in filenames with chars from CHARS (1 or 2 chars long, default is '()')\n"
@@ -1225,9 +1225,6 @@ def main():
         if args.debug:
             logger.setLevel(logging.DEBUG)
         logger.prepare(args.timestamp or args.debug, args.silent, args.silent_scanning, args.silent_headers)
-
-        if args.address and any(c in args.address[0] for c in r'/@:'):
-            raise ValueError("Host name can't contain '/@:' characters")
 
         global options
         options = Options(
