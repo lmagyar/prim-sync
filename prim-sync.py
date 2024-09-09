@@ -242,6 +242,37 @@ class LocalFileInfo(FileInfo):
         self.btime = datetime.fromtimestamp(0, timezone.utc)
         self.symlink_target = None
 
+# File transactions (when restartable operation is used and not directly overwriting destination file; valid for both local and remote operations)
+#
+# Creating new file
+# .old .tmp (original) .new
+#                           original state
+#                        x  .new file created and written (possible unfinished write operations)
+#               x           .new file renamed to it's real name
+#
+# Overwriting file
+# .old .tmp (original) .new
+#               x           original state
+#               x        x  .new file created and written (possible unfinished write operations)
+#        x               x  original renamed to .tmp to determine possible change
+#   x                    x  if unchanged, rename .tmp to .old (if changed, rename .tmp back to original, delete .new, start over next time)
+#   x           x           .new file renamed to it's real name
+#               x           .old file deleted
+#
+# Recovery:
+#
+#      .tmp
+#        x                  if there is a .tmp file, rename it to original (fail if this fails)
+#
+# .old      (original) .new
+#                        x  delete .new
+#                x          OK
+#                x       x  delete .new
+#   x                       RuntimeError
+#   x                    x  rename .new to it's real name (then .old file deleted, see next line)
+#   x            x          delete .old
+#   x            x       x  RuntimeError
+
 class Local:
     def __init__(self, local_path: str):
         self.local_path = PurePath(local_path)
@@ -989,6 +1020,32 @@ class Sync:
         self.collect()
         self.compare()
         self.execute()
+
+# Bidirectional comparison
+#
+#        |   x   |   -   |   o   |   +   |   ?   |
+# -------|-------|-------|-------|-------|-------|
+#    x   |   x   |  --   |  <<   |  <C>  |   >>  |
+#    -   |   --  |   x   |  <!>  |  <!>  |   x   |
+#    o   |   >>  |  <!>  |  <C>  |  <C>  |   >>  |
+#    +   |  <C>  |  <!>  |  <C>  |  <C>  |   >>  |
+#    ?   |  <<   |   x   |  <<   |  <<   |#######|
+#
+# Header:
+# x unchanged
+# - deleted
+# o changed
+# + new
+# ? unknown (we have never seen it)
+#
+# Action:
+#  x  do nothing
+# --  delete local
+#  -- delete remote
+# <<  download
+#  >> upload
+# <C> compare (content or hash) to determine whether we have a conflict
+# <!> conflict
 
 class BidirectionalSync(Sync):
     def compare(self):
