@@ -16,6 +16,8 @@ Why another sync solution? Because none of the professional solutions can write 
 
 See my other project, https://github.com/lmagyar/prim-ctrl, for remote control of your phone's Primitive FTPd SFTP server and optionally Tailscale VPN.
 
+**Note:** These are my first ever Python projects, any comments on how to make them better are appreciated.
+
 ## Features
 
 - Follow local symlinks
