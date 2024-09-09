@@ -1,4 +1,5 @@
 
+from abc import abstractmethod
 import argparse
 import hashlib
 import logging
@@ -119,6 +120,8 @@ class Options():
     deletion_wins_over_change: bool = False
     local_wins_patterns: set[str] = field(default_factory=set)
     remote_wins_patterns: set[str] = field(default_factory=set)
+    mirror: bool = False
+    mirror_patterns: set[str] = field(default_factory=set)
     valid_chars: dict | None = None
     remote_state_prefix: str | None = None
     dry: bool = False
@@ -276,9 +279,9 @@ class LocalFileInfo(FileInfo):
 class Local:
     def __init__(self, local_path: str):
         self.local_path = PurePath(local_path)
-        self.has_unsupported_hardlink = False
+        self.has_unsupported_hardlink = False # will be changed during scandir() if is_destination is True
 
-    def scandir(self):
+    def scandir(self, is_destination: bool):
         def _scandir(path: PurePosixPath):
             logger.debug("Scanning local %s", str(self.local_path / path))
             while True: # recovery
@@ -321,7 +324,7 @@ class Local:
                         logger.info("              renaming to: %s", valid_relative_name)
                         os.rename(self.local_path / relative_name, self.local_path / valid_relative_name)
                         relative_name = valid_relative_name
-                    if not options.overwrite_destination:
+                    if is_destination and not options.overwrite_destination:
                         stat = entry.stat(follow_symlinks=False)
                         if stat.st_nlink > 1:
                             logger.warning("<<< HARDLNK %s", relative_name)
@@ -823,41 +826,10 @@ class Sync:
                 or (options.use_content_for_comparison and _compare_or_hash_files())
                 or (not options.use_mtime_for_comparison and not options.use_content_for_comparison)))
 
-    def _resolve(self, relative_path: str):
-        if ((options.newer_wins or options.older_wins) and not relative_path.endswith('/')
-                and (local_mtime := cast(FileInfo, self.local_current[relative_path]).mtime) != (remote_mtime := cast(FileInfo, self.remote_current[relative_path]).mtime)):
-            if local_mtime > remote_mtime and options.newer_wins or local_mtime < remote_mtime and options.older_wins:
-                self.upload.add(relative_path)
-            else:
-                self.download.add(relative_path)
-        else:
-            prefer_local = any(fnmatch(relative_path, p) for p in options.local_wins_patterns)
-            prefer_remote = any(fnmatch(relative_path, p) for p in options.remote_wins_patterns)
-            if prefer_local and not prefer_remote:
-                self.upload.add(relative_path)
-            elif not prefer_local and prefer_remote:
-                self.download.add(relative_path)
-            else:
-                return False
-        return True
-
-    def _resolve_local_deleted(self, relative_path: str):
-        if options.change_wins_over_deletion:
-            self.download.add(relative_path)
-        elif options.deletion_wins_over_change:
-            self.delete_remote.add(relative_path)
-        else:
-            return False
-        return True
-
-    def _resolve_remote_deleted(self, relative_path: str):
-        if options.change_wins_over_deletion:
-            self.upload.add(relative_path)
-        elif options.deletion_wins_over_change:
-            self.delete_local.add(relative_path)
-        else:
-            return False
-        return True
+    @property
+    @abstractmethod
+    def is_local_destination(self) -> bool:
+        pass
 
     def collect(self):
         def _new_entries(current: dict, previous: dict):
@@ -872,11 +844,11 @@ class Sync:
         logger.info_header("----------- Scanning")
 
         self.local_previous, self.remote_previous = self.storage.load_psync_info()
-        self.local_current = dict(sorted(self.local.scandir()))
+        self.local_current = dict(sorted(self.local.scandir(self.is_local_destination)))
         self.remote_current = dict(sorted(self.remote.scandir()))
 
         if self.local.has_unsupported_hardlink:
-            raise RuntimeError("Hardlinks can't be used without enabling --overwrite-destination option")
+            raise RuntimeError("Hardlinks can't be used on local side as destination without enabling --overwrite-destination option")
 
         self.local_new = _new_entries(self.local_current, self.local_previous)
         self.local_deleted = _deleted_entries(self.local_current, self.local_previous)
@@ -1023,7 +995,7 @@ class Sync:
 
 # Bidirectional comparison
 #
-#        |   x   |   -   |   o   |   +   |   ?   |
+#   L\R  |   x   |   -   |   o   |   +   |   ?   |
 # -------|-------|-------|-------|-------|-------|
 #    x   |   x   |  --   |  <<   |  <C>  |   >>  |
 #    -   |   --  |   x   |  <!>  |  <!>  |   x   |
@@ -1032,6 +1004,7 @@ class Sync:
 #    ?   |  <<   |   x   |  <<   |  <<   |#######|
 #
 # Header:
+# L\R = Local\Remote
 # x unchanged
 # - deleted
 # o changed
@@ -1048,6 +1021,45 @@ class Sync:
 # <!> conflict
 
 class BidirectionalSync(Sync):
+    def is_local_destination(self) -> bool:
+        return True
+
+    def _resolve(self, relative_path: str):
+        if ((options.newer_wins or options.older_wins) and not relative_path.endswith('/')
+                and (local_mtime := cast(FileInfo, self.local_current[relative_path]).mtime) != (remote_mtime := cast(FileInfo, self.remote_current[relative_path]).mtime)):
+            if local_mtime > remote_mtime and options.newer_wins or local_mtime < remote_mtime and options.older_wins:
+                self.upload.add(relative_path)
+            else:
+                self.download.add(relative_path)
+        else:
+            prefer_local = options.local_wins_patterns and any(fnmatch(relative_path, p) for p in options.local_wins_patterns)
+            prefer_remote = options.remote_wins_patterns and any(fnmatch(relative_path, p) for p in options.remote_wins_patterns)
+            if prefer_local and not prefer_remote:
+                self.upload.add(relative_path)
+            elif not prefer_local and prefer_remote:
+                self.download.add(relative_path)
+            else:
+                return False
+        return True
+
+    def _resolve_local_deleted(self, relative_path: str):
+        if options.change_wins_over_deletion:
+            self.download.add(relative_path)
+        elif options.deletion_wins_over_change:
+            self.delete_remote.add(relative_path)
+        else:
+            return False
+        return True
+
+    def _resolve_remote_deleted(self, relative_path: str):
+        if options.change_wins_over_deletion:
+            self.upload.add(relative_path)
+        elif options.deletion_wins_over_change:
+            self.delete_local.add(relative_path)
+        else:
+            return False
+        return True
+
     def compare(self):
         super().compare()
 
@@ -1080,6 +1092,7 @@ class BidirectionalSync(Sync):
             if p in self.local_new:
                 if not self._resolve_remote_deleted(p):
                     self.conflict[p] = "is new locally but deleted remotely"
+
         for p in self.local_deleted:
             if p in self.remote_changed:
                 if not self._resolve_local_deleted(p):
@@ -1087,6 +1100,7 @@ class BidirectionalSync(Sync):
             if p in self.local_new:
                 if not self._resolve_local_deleted(p):
                     self.conflict[p] = "is deleted locally but new remotely"
+
         for p in self.remote_new:
             if p in self.local_unchanged:
                 if not self._is_identical(p) and not self._resolve(p):
@@ -1111,6 +1125,228 @@ class BidirectionalSync(Sync):
             if p in self.remote_changed:
                 if not self._is_identical(p) and not self._resolve(p):
                     self.conflict[p] = "is new locally but changed remotely and they are different"
+
+# Unidirectional inward (<-) comparison
+#
+#   L\R  |   x   |   -   |   o   |   +   |   ?   |
+# -------|-------|-------|-------|-------|-------|
+#    x   |   x   |  --   |  <<   |  <C   |  -!   |
+#    -   |  <!   |   x   |  <!   |  <!   |   x   |
+#    o   |  <!   |  -!   |  <C   |  <C   |  -!   |
+#    +   |  <C   |  -!   |  <C   |  <C   |  -!   |
+#    ?   |  <<   |   x   |  <<   |  <<   |#######|
+#
+# Header:
+# L\R = Local\Remote
+# x unchanged
+# - deleted
+# o changed
+# + new
+# ? unknown (we have never seen it)
+#
+# Action:
+#  x  do nothing
+# --  delete local
+# <<  download
+# <C  compare (content or hash) to determine whether we have a conflict to download
+# -!  conflict to delete local
+# <!  conflict to download
+
+class UnidirectionalInwardSync(Sync):
+    def is_local_destination(self) -> bool:
+        return True
+
+    def _resolve_download(self, relative_path: str):
+        if options.mirror or options.mirror_patterns and any(fnmatch(relative_path, p) for p in options.mirror_patterns):
+            self.download.add(relative_path)
+        else:
+            return False
+        return True
+
+    def _resolve_local_deletion(self, relative_path: str):
+        if options.mirror or options.mirror_patterns and any(fnmatch(relative_path, p) for p in options.mirror_patterns):
+            self.delete_local.add(relative_path)
+        else:
+            return False
+        return True
+
+    def compare(self):
+        super().compare()
+
+        for p in self.remote_deleted:
+            if p in self.local_unchanged:
+                self.delete_local.add(p)
+
+        for p in self.remote_changed:
+            if p in self.local_unchanged:
+                self.download.add(p)
+        for p in self.remote_current:
+            if p not in self.local_current and p not in self.local_deleted:
+                self.download.add(p)
+
+        for p in self.local_changed:
+            if p not in self.remote_current:
+                if not self._resolve_local_deletion(p):
+                    if p in self.remote_deleted:
+                        self.conflict[p] = "is changed locally but also deleted remotely" # existing text
+                    else:
+                        self.conflict[p] = "is changed locally but unknown remotely"
+        for p in self.local_new:
+            if p not in self.remote_current:
+                if not self._resolve_local_deletion(p):
+                    if p in self.remote_deleted:
+                        self.conflict[p] = "is new locally but deleted remotely" # existing text
+                    else:
+                        self.conflict[p] = "is new locally but unknown remotely"
+        for p in self.local_unchanged:
+            if p not in self.remote_current and p not in self.remote_deleted:
+                if not self._resolve_local_deletion(p):
+                    self.conflict[p] = "unchanged locally but is unknown remotely"
+
+        for p in self.local_deleted:
+            if p in self.remote_current:
+                if not self._resolve_download(p):
+                    self.conflict[p] = "is deleted locally but exists remotely"
+        for p in self.local_changed:
+            if p in self.remote_unchanged:
+                if not self._resolve_download(p):
+                    self.conflict[p] = "is changed locally but unchanged remotely"
+
+        for p in self.remote_new:
+            if p in self.local_unchanged:
+                if not self._is_identical(p) and not self._resolve_download(p):
+                    self.conflict[p] = "is unchanged locally but new remotely and they are different" # existing text
+        for p in self.local_new:
+            if p in self.remote_unchanged:
+                if not self._is_identical(p) and not self._resolve_download(p):
+                    self.conflict[p] = "is new locally but unchanged remotely and they are different" # existing text
+        for p in self.local_changed:
+            if p in self.remote_changed:
+                if not self._is_identical(p) and not self._resolve_download(p):
+                    self.conflict[p] = "is changed locally and remotely and they are different" # existing text
+        for p in self.local_new:
+            if p in self.remote_new:
+                if not self._is_identical(p) and not self._resolve_download(p):
+                    self.conflict[p] = "is new locally and remotely but they are different" # existing text
+        for p in self.local_changed:
+            if p in self.remote_new:
+                if not self._is_identical(p) and not self._resolve_download(p):
+                    self.conflict[p] = "is changed locally but new remotely and they are different" # existing text
+        for p in self.local_new:
+            if p in self.remote_changed:
+                if not self._is_identical(p) and not self._resolve_download(p):
+                    self.conflict[p] = "is new locally but changed remotely and they are different" # existing text
+
+# Unidirectional outward (->) comparison
+#
+#   L\R  |   x   |   -   |   o   |   +   |   ?   |
+# -------|-------|-------|-------|-------|-------|
+#    x   |   x   |   !>  |   !>  |   C>  |   >>  |
+#    -   |   --  |   x   |   !-  |   !-  |   x   |
+#    o   |   >>  |   !>  |   C>  |   C>  |   >>  |
+#    +   |   C>  |   !>  |   C>  |   C>  |   >>  |
+#    ?   |   !-  |   x   |   !-  |   !-  |#######|
+#
+# Header:
+# L\R = Local\Remote
+# x unchanged
+# - deleted
+# o changed
+# + new
+# ? unknown (we have never seen it)
+#
+# Action:
+#  x  do nothing
+#  -- delete remote
+#  >> upload
+#  C> compare (content or hash) to determine whether we have a conflict to upload
+#  !- conflict to delete remote
+#  !> conflict to upload
+
+class UnidirectionalOutwardSync(Sync):
+    def is_local_destination(self) -> bool:
+        return False
+
+    def _resolve_upload(self, relative_path: str):
+        if options.mirror or options.mirror_patterns and any(fnmatch(relative_path, p) for p in options.mirror_patterns):
+            self.upload.add(relative_path)
+        else:
+            return False
+        return True
+
+    def _resolve_remote_deletion(self, relative_path: str):
+        if options.mirror or options.mirror_patterns and any(fnmatch(relative_path, p) for p in options.mirror_patterns):
+            self.delete_remote.add(relative_path)
+        else:
+            return False
+        return True
+
+    def compare(self):
+        super().compare()
+
+        for p in self.local_deleted:
+            if p in self.remote_unchanged:
+                self.delete_remote.add(p)
+
+        for p in self.local_changed:
+            if p in self.remote_unchanged:
+                self.upload.add(p)
+        for p in self.local_current:
+            if p not in self.remote_current and p not in self.remote_deleted:
+                self.upload.add(p)
+
+        for p in self.remote_changed:
+            if p not in self.local_current:
+                if not self._resolve_remote_deletion(p):
+                    if p in self.local_deleted:
+                        self.conflict[p] = "is deleted locally but also changed remotely" # existing text
+                    else:
+                        self.conflict[p] = "is unknown locally but also changed remotely"
+        for p in self.remote_new:
+            if p not in self.local_current:
+                if not self._resolve_remote_deletion(p):
+                    if p in self.local_deleted:
+                        self.conflict[p] = "is deleted locally but new remotely" # existing text
+                    else:
+                        self.conflict[p] = "is unknown locally but new remotely"
+        for p in self.remote_unchanged:
+            if p not in self.local_current and p not in self.local_deleted:
+                if not self._resolve_remote_deletion(p):
+                    self.conflict[p] = "is unknown locally but unchanged remotely"
+
+        for p in self.remote_deleted:
+            if p in self.local_current:
+                if not self._resolve_upload(p):
+                    self.conflict[p] = "exists locally but is deleted remotely"
+        for p in self.remote_changed:
+            if p in self.local_unchanged:
+                if not self._resolve_upload(p):
+                    self.conflict[p] = "is unchanged locally but changed remotely"
+
+        for p in self.remote_new:
+            if p in self.local_unchanged:
+                if not self._is_identical(p) and not self._resolve_upload(p):
+                    self.conflict[p] = "is unchanged locally but new remotely and they are different" # existing text
+        for p in self.local_new:
+            if p in self.remote_unchanged:
+                if not self._is_identical(p) and not self._resolve_upload(p):
+                    self.conflict[p] = "is new locally but unchanged remotely and they are different" # existing text
+        for p in self.local_changed:
+            if p in self.remote_changed:
+                if not self._is_identical(p) and not self._resolve_upload(p):
+                    self.conflict[p] = "is changed locally and remotely and they are different" # existing text
+        for p in self.local_new:
+            if p in self.remote_new:
+                if not self._is_identical(p) and not self._resolve_upload(p):
+                    self.conflict[p] = "is new locally and remotely but they are different" # existing text
+        for p in self.local_changed:
+            if p in self.remote_new:
+                if not self._is_identical(p) and not self._resolve_upload(p):
+                    self.conflict[p] = "is changed locally but new remotely and they are different" # existing text
+        for p in self.local_new:
+            if p in self.remote_changed:
+                if not self._is_identical(p) and not self._resolve_upload(p):
+                    self.conflict[p] = "is new locally but changed remotely and they are different" # existing text
 
 ########
 
@@ -1188,6 +1424,9 @@ def main():
         parser.add_argument('remote_folder', metavar='remote-folder', help="the remote folder name to be synchronized (you can use * if this is the same as the local folder name above)")
 
         parser.add_argument('-a', '--address', nargs=2, metavar=('host', 'port') , help="if zeroconf is not used, then the address of the server")
+        parser_direction_group = parser.add_mutually_exclusive_group()
+        parser_direction_group.add_argument('-ui', '--unidirectional-inward', help="unidirectional inward sync (default is bidirectional sync)", default=False, action='store_true')
+        parser_direction_group.add_argument('-uo', '--unidirectional-outward', help="unidirectional outward sync (default is bidirectional sync)", default=False, action='store_true')
         parser.add_argument('-d', '--dry', help="no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up", default=False, action='store_true')
         parser.add_argument('-D', '--dry-on-conflict', help="in case of unresolved conflict(s), run dry", default=False, action='store_true')
         parser.add_argument('-v', '--valid-chars', nargs='?', metavar="CHARS", help="replace [] chars in filenames with chars from CHARS (1 or 2 chars long, default is '()')\n"
@@ -1210,15 +1449,19 @@ def main():
         comparison_group.add_argument('-C', '--dont-use-content-for-comparison', dest="use_content_for_comparison", help="beyond size, modification time or content must be equal, if both are disabled, only size is compared", default=True, action='store_false')
         comparison_group.add_argument('-H', '--dont-use-hash-for-content-comparison', dest="use_hash_for_content_comparison", help="not all sftp servers support hashing, but downloading content for comparison is mush slower than hashing", default=True, action='store_false')
 
-        conflict_resolution_group = parser.add_argument_group('conflict resolution')
-        conflict_resolution_newer_older_group = conflict_resolution_group.add_mutually_exclusive_group()
-        conflict_resolution_newer_older_group.add_argument('-n', '--newer-wins', help="in case of conflict, newer file wins", default=False, action='store_true')
-        conflict_resolution_newer_older_group.add_argument('-o', '--older-wins', help="in case of conflict, older file wins", default=False, action='store_true')
-        conflict_resolution_change_deletion_group = conflict_resolution_group.add_mutually_exclusive_group()
-        conflict_resolution_change_deletion_group.add_argument('-cod', '--change-wins-over-deletion', help="in case of conflict, changed/new file wins over deleted file", default=False, action='store_true')
-        conflict_resolution_change_deletion_group.add_argument('-doc', '--deletion-wins-over-change', help="in case of conflict, deleted file wins over changed/new file", default=False, action='store_true')
-        conflict_resolution_group.add_argument('-l', '--local-wins-patterns', nargs='+', metavar="PATTERN", help="in case of conflict, local files matching this Unix shell PATTERN win, multiple values are allowed, separated by space", default=[])
-        conflict_resolution_group.add_argument('-r', '--remote-wins-patterns', nargs='+', metavar="PATTERN", help="in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space", default=[])
+        bidir_conflict_resolution_group = parser.add_argument_group('bidirectional conflict resolution')
+        bidir_conflict_resolution_newer_older_group = bidir_conflict_resolution_group.add_mutually_exclusive_group()
+        bidir_conflict_resolution_newer_older_group.add_argument('-n', '--newer-wins', help="in case of conflict, newer file wins", default=False, action='store_true')
+        bidir_conflict_resolution_newer_older_group.add_argument('-o', '--older-wins', help="in case of conflict, older file wins", default=False, action='store_true')
+        bidir_conflict_resolution_change_deletion_group = bidir_conflict_resolution_group.add_mutually_exclusive_group()
+        bidir_conflict_resolution_change_deletion_group.add_argument('-cod', '--change-wins-over-deletion', help="in case of conflict, changed/new file wins over deleted file", default=False, action='store_true')
+        bidir_conflict_resolution_change_deletion_group.add_argument('-doc', '--deletion-wins-over-change', help="in case of conflict, deleted file wins over changed/new file", default=False, action='store_true')
+        bidir_conflict_resolution_group.add_argument('-l', '--local-wins-patterns', nargs='+', metavar="PATTERN", help="in case of conflict, local files matching this Unix shell PATTERN win, multiple values are allowed, separated by space", default=[])
+        bidir_conflict_resolution_group.add_argument('-r', '--remote-wins-patterns', nargs='+', metavar="PATTERN", help="in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space", default=[])
+
+        unidir_conflict_resolution_group = parser.add_argument_group('unidirectional conflict resolution')
+        unidir_conflict_resolution_group.add_argument('-m', '--mirror', nargs='*', metavar="PATTERN", help="in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space\n"
+                                                      "if no PATTERN is specified, all files will be mirrored")
 
         args = parser.parse_args()
 
@@ -1226,12 +1469,21 @@ def main():
             logger.setLevel(logging.DEBUG)
         logger.prepare(args.timestamp or args.debug, args.silent, args.silent_scanning, args.silent_headers)
 
+        if args.unidirectional_inward or args.unidirectional_outward:
+            if args.newer_wins or args.older_wins or args.change_wins_over_deletion or args.deletion_wins_over_change or args.local_wins_patterns or args.remote_wins_patterns:
+                raise ValueError("Can't specify bidirectional options for unidirectional sync")
+        else:
+            if args.mirror is not None:
+                raise ValueError("Can't specify unidirectional options for bidirectional sync")
+
         global options
         options = Options(
             use_mtime_for_comparison=args.use_mtime_for_comparison, use_content_for_comparison=args.use_content_for_comparison, use_hash_for_content_comparison=args.use_hash_for_content_comparison,
             newer_wins=args.newer_wins, older_wins=args.older_wins,
             change_wins_over_deletion=args.change_wins_over_deletion, deletion_wins_over_change=args.deletion_wins_over_change,
             local_wins_patterns=set(args.local_wins_patterns), remote_wins_patterns=set(args.remote_wins_patterns),
+            mirror=(args.mirror is not None and len(args.mirror) == 0),
+            mirror_patterns=set(args.mirror or []),
             valid_chars=dict({k: v for k, v in zip(["[", "]"], [c for c in (args.valid_chars if len(args.valid_chars) >=2 else args.valid_chars + args.valid_chars)])}) if args.valid_chars else None,
             remote_state_prefix=args.remote_state_prefix,
             dry=args.dry, dry_on_conflict=args.dry_on_conflict,
@@ -1284,7 +1536,12 @@ def main():
                 with ssh.open_sftp() as sftp:
                     with Local(local_path) as local:
                         with Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote:
-                            sync = BidirectionalSync(local, remote, Storage(local_path, args.server_name))
+                            if args.unidirectional_inward:
+                                sync = UnidirectionalInwardSync(local, remote, Storage(local_path, args.server_name))
+                            elif args.unidirectional_outward:
+                                sync = UnidirectionalOutwardSync(local, remote, Storage(local_path, args.server_name))
+                            else:
+                                sync = BidirectionalSync(local, remote, Storage(local_path, args.server_name))
                             sync.run()
 
     except Exception as e:

@@ -188,7 +188,7 @@ On regular runs the meaning of the log lines are:
 - CHANGED - The destination file changed after the decision is made to update it and before it replaced by the new content, this conflict will be handled on the next run.
 
 Notes:
-- File creation times (birthtime) are:
+- Local file creation times (birthtime) are:
   - preserved on Windows but not on Unix when the default restartable operation is used
   - unchanged when --overwrite-destination option is used
 - You can brainwash (ie. delete the state under the .prim-sync folder) between two runs. After this, the script will behave, as if the next run is the first run (see "first run" above).
@@ -197,8 +197,8 @@ Notes:
 ### Options
 
 ```
-usage: prim-sync.py [-h] [-a host port] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H] [-n | -o] [-cod | -doc] [-l PATTERN [PATTERN ...]]
-                    [-r PATTERN [PATTERN ...]]
+usage: prim-sync.py [-h] [-a host port] [-ui | -uo] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H] [-n | -o] [-cod | -doc]
+                    [-l PATTERN [PATTERN ...]] [-r PATTERN [PATTERN ...]] [-m [PATTERN ...]]
                     server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
 
 Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the Primitive FTPd Android SFTP server (https://github.com/wolpi/prim-ftpd), for more details see https://github.com/lmagyar/prim-sync
@@ -214,7 +214,9 @@ positional arguments:
 
 options:
   -h, --help                         show this help message and exit
-  -a host port, --address host port  if zeroconf is not used, then the address of the server (the host name is without '@' and ':')
+  -a host port, --address host port  if zeroconf is not used, then the address of the server
+  -ui, --unidirectional-inward       unidirectional inward sync (default is bidirectional sync)
+  -uo, --unidirectional-outward      unidirectional outward sync (default is bidirectional sync)
   -d, --dry                          no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up
   -D, --dry-on-conflict              in case of unresolved conflict(s), run dry
   -v [CHARS], --valid-chars [CHARS]  replace [] chars in filenames with chars from CHARS (1 or 2 chars long, default is '()')
@@ -241,7 +243,7 @@ comparison:
   -H, --dont-use-hash-for-content-comparison
                                      not all sftp servers support hashing, but downloading content for comparison is mush slower than hashing
 
-conflict resolution:
+bidirectional conflict resolution:
   -n, --newer-wins                   in case of conflict, newer file wins
   -o, --older-wins                   in case of conflict, older file wins
   -cod, --change-wins-over-deletion  in case of conflict, changed/new file wins over deleted file
@@ -250,6 +252,11 @@ conflict resolution:
                                      in case of conflict, local files matching this Unix shell PATTERN win, multiple values are allowed, separated by space
   -r PATTERN [PATTERN ...], --remote-wins-patterns PATTERN [PATTERN ...]
                                      in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space
+
+unidirectional conflict resolution:
+  -m [PATTERN ...], --mirror [PATTERN ...]
+                                     in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space
+                                     if no PATTERN is specified, all files will be mirrored
 ```
 
 ### Some example
