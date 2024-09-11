@@ -1,6 +1,6 @@
 
 > [!CAUTION]
-> ***This repository is in alpha***
+> ***This branch is in alpha***
 
 > [!WARNING]
 > ***This repository currently works much better with my modified version of the Primitive FTPd Android SFTP server!***
