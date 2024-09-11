@@ -288,7 +288,14 @@ class LocalFileInfo(FileInfo):
 class Local:
     def __init__(self, local_path: str):
         self.local_path = PurePath(local_path)
-        self.has_unsupported_hardlink = False # will be changed during scandir() if is_destination is True
+        self._lockfile = None
+        self._has_unsupported_hardlink = None
+
+    @property
+    def has_unsupported_hardlink(self) -> bool:
+        if self._has_unsupported_hardlink is None:
+            raise RuntimeError("Local.scandir() has to be called before has_unsupported_hardlink can be accessed")
+        return self._has_unsupported_hardlink
 
     def scandir(self, is_destination: bool):
         def _scandir(path: PurePosixPath):
@@ -337,11 +344,12 @@ class Local:
                         stat = entry.stat(follow_symlinks=False)
                         if stat.st_nlink > 1:
                             logger.warning("<<< HARDLNK %s", relative_name)
-                            self.has_unsupported_hardlink = True
+                            self._has_unsupported_hardlink = True
                     stat = entry.stat(follow_symlinks=True)
                     yield relative_name, LocalFileInfo(size=stat.st_size, mtime=datetime.fromtimestamp(stat.st_mtime, timezone.utc),
                         btime=datetime.fromtimestamp(stat.st_birthtime if SETFILETIME_SUPPORTED else 0, timezone.utc),
                         symlink_target=str(Path(self.local_path / relative_path).resolve(strict=True)) if entry.is_symlink() else None)
+        self._has_unsupported_hardlink = False
         yield from _scandir(PurePosixPath(''))
 
     def remove(self, relative_path: str, fileinfo: FileInfo | None):
@@ -471,7 +479,7 @@ class Local:
         except FileExistsError:
             pass
 
-    def __enter__(self):
+    def _lock(self):
         def _get_stat(file_name: str):
             try:
                 return os.stat(file_name)
@@ -491,7 +499,7 @@ class Local:
             if options.ignore_locks is not None:
                 lock_stat = _get_stat(lock_file_name)
             mode = "x" if options.ignore_locks is None or lock_stat is None or (datetime.fromtimestamp(lock_stat.st_mtime, timezone.utc) + timedelta(minutes=options.ignore_locks) > datetime.now(timezone.utc)) else "w"
-            self.lockfile = open(lock_file_name, mode)
+            self._lockfile = open(lock_file_name, mode)
         except IOError as e:
             e.add_note(f"Can't acquire lock on local folder (can't create {e.filename}), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
             if lock_stat is None and options.ignore_locks is None:
@@ -499,13 +507,19 @@ class Local:
             if lock_stat is not None:
                 e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(lock_stat.st_mtime).replace(microsecond=0)}")
             raise
+
+    def _unlock(self):
+        if self._lockfile:
+            logger.debug("Unlocking local")
+            self._lockfile.close()
+            os.remove(str(self.local_path / LOCK_FILE_NAME))
+
+    def __enter__(self):
+        self._lock()
         return self
 
     def __exit__(self, exc_type, exc_value, exc_tb):
-        if self.lockfile:
-            logger.debug("Unlocking local")
-            self.lockfile.close()
-            os.remove(str(self.local_path / LOCK_FILE_NAME))
+        self._unlock()
 
 class Remote:
     def __init__(self, local_folder: str, sftp: paramiko.SFTPClient, remote_read_path: str, remote_write_path: str):
@@ -513,6 +527,7 @@ class Remote:
         self.sftp = sftp
         self.remote_read_path = PurePosixPath(remote_read_path)
         self.remote_write_path = PurePosixPath(remote_write_path)
+        self._lockfile = None
 
     def scandir(self):
         def _scandir(path: PurePosixPath):
@@ -693,7 +708,7 @@ class Remote:
             lock_file_name = lock_folder / _remove_first_slash(str(self.remote_write_path) + LOCK_FILE_SUFFIX).replace('/', '#')
             return (str(lock_folder), str(lock_file_name))
 
-    def __enter__(self):
+    def _lock(self):
         def _get_stat(file_name: str):
             try:
                 logger.debug("SFTP stat on %s", file_name)
@@ -726,7 +741,7 @@ class Remote:
                 lock_stat = _get_stat(lock_file_name)
             mode = "x" if options.ignore_locks is None or lock_stat is None or lock_stat.st_mtime is None or (datetime.fromtimestamp(lock_stat.st_mtime, timezone.utc) + timedelta(minutes=options.ignore_locks) > datetime.now(timezone.utc)) else "w"
             logger.debug("SFTP open on %s", lock_file_name)
-            self.lockfile = self.sftp.open(lock_file_name, mode)
+            self._lockfile = self.sftp.open(lock_file_name, mode)
         except IOError as e:
             e.add_note(f"Can't acquire lock on remote folder (can't create {e}), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
             if lock_stat is None and options.ignore_locks is None:
@@ -734,16 +749,22 @@ class Remote:
             if lock_stat is not None and lock_stat.st_mtime:
                 e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(lock_stat.st_mtime)}")
             raise
-        return self
 
-    def __exit__(self, exc_type, exc_value, exc_tb):
-        if self.lockfile:
+    def _unlock(self):
+        if self._lockfile:
             logger.debug("Unlocking remote")
             _lock_folder, lock_file_name = self._lock_file_name()
             logger.debug("SFTP close on %s", lock_file_name)
-            self.lockfile.close()
+            self._lockfile.close()
             logger.debug("SFTP remove on %s", lock_file_name)
             self.sftp.remove(lock_file_name)
+
+    def __enter__(self):
+        self._lock()
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        self._unlock()
 
 class Storage:
     def __init__(self, local_path: str, server_name: str):
