@@ -245,15 +245,17 @@ class LocalFileInfo(FileInfo):
         self.btime = datetime.fromtimestamp(0, timezone.utc)
         self.symlink_target = None
 
-# File transactions (when restartable operation is used and not directly overwriting destination file; valid for both local and remote operations)
+# File transactions (when restartable operation is used ie. not directly overwriting destination file; these are valid for both local and remote operations)
 #
 # Creating new file
+#
 # .old .tmp (original) .new
 #                           original state
 #                        x  .new file created and written (possible unfinished write operations)
 #               x           .new file renamed to it's real name
 #
 # Overwriting file
+#
 # .old .tmp (original) .new
 #               x           original state
 #               x        x  .new file created and written (possible unfinished write operations)
@@ -261,6 +263,13 @@ class LocalFileInfo(FileInfo):
 #   x                    x  if unchanged, rename .tmp to .old (if changed, rename .tmp back to original, delete .new, start over next time)
 #   x           x           .new file renamed to it's real name
 #               x           .old file deleted
+#
+# Deleting file
+#
+# .old .tmp (original) .new
+#               x           original state
+#        x                  original renamed to .tmp to determine possible change
+#                           if unchanged, delete .tmp (if changed, rename .tmp back to original, start over next time)
 #
 # Recovery:
 #
