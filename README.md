@@ -198,7 +198,7 @@ Notes:
 
 ```
 usage: prim-sync.py [-h] [-a host port] [-ui | -uo] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H] [-n | -o] [-cod | -doc]
-                    [-l PATTERN [PATTERN ...]] [-r PATTERN [PATTERN ...]] [-m [PATTERN ...]]
+                    [-l [PATTERN ...]] [-r [PATTERN ...]] [-m [PATTERN ...]]
                     server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
 
 Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the Primitive FTPd Android SFTP server (https://github.com/wolpi/prim-ftpd), for more details see https://github.com/lmagyar/prim-sync
@@ -248,10 +248,12 @@ bidirectional conflict resolution:
   -o, --older-wins                   in case of conflict, older file wins
   -cod, --change-wins-over-deletion  in case of conflict, changed/new file wins over deleted file
   -doc, --deletion-wins-over-change  in case of conflict, deleted file wins over changed/new file
-  -l PATTERN [PATTERN ...], --local-wins-patterns PATTERN [PATTERN ...]
+  -l [PATTERN ...], --local-wins-patterns [PATTERN ...]
                                      in case of conflict, local files matching this Unix shell PATTERN win, multiple values are allowed, separated by space
-  -r PATTERN [PATTERN ...], --remote-wins-patterns PATTERN [PATTERN ...]
+                                     if no PATTERN is specified, local always wins
+  -r [PATTERN ...], --remote-wins-patterns [PATTERN ...]
                                      in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space
+                                     if no PATTERN is specified, remote always wins
 
 unidirectional conflict resolution:
   -m [PATTERN ...], --mirror [PATTERN ...]
