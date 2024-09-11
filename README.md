@@ -23,7 +23,7 @@ See my other project, https://github.com/lmagyar/prim-ctrl, for remote control o
 - Follow local symlinks
 - Hash files for fast comparison ***( !!! currently requires the forked Primitive FTPd !!! )***
 - Write SD card (with Primitive FTPd and Storage Access Framework) ***( !!! fast operation currently requires the forked Primitive FTPd !!! )***
-- Dual access in case of SD card (reading plain-old file-system for fast scan and download and writing with the slower Storage Access Framework)
+- Dual access in case of SD card (reading plain-old file-system for fast scan and download, and writing with the slower Storage Access Framework)
 - Failsafe, restartable operation (costs some time, renames on SD card are slow)
 
 #### Notes on following local symlinks
