@@ -118,7 +118,9 @@ class Options():
     older_wins: bool = False
     change_wins_over_deletion: bool = False
     deletion_wins_over_change: bool = False
+    local_wins: bool = False
     local_wins_patterns: set[str] = field(default_factory=set)
+    remote_wins: bool = False
     remote_wins_patterns: set[str] = field(default_factory=set)
     mirror: bool = False
     mirror_patterns: set[str] = field(default_factory=set)
@@ -1062,8 +1064,8 @@ class BidirectionalSync(Sync):
             else:
                 self.download.add(relative_path)
         else:
-            prefer_local = options.local_wins_patterns and any(fnmatch(relative_path, p) for p in options.local_wins_patterns)
-            prefer_remote = options.remote_wins_patterns and any(fnmatch(relative_path, p) for p in options.remote_wins_patterns)
+            prefer_local = options.local_wins or options.local_wins_patterns and any(fnmatch(relative_path, p) for p in options.local_wins_patterns)
+            prefer_remote = options.remote_wins or options.remote_wins_patterns and any(fnmatch(relative_path, p) for p in options.remote_wins_patterns)
             if prefer_local and not prefer_remote:
                 self.upload.add(relative_path)
             elif not prefer_local and prefer_remote:
@@ -1486,8 +1488,10 @@ def main():
         bidir_conflict_resolution_change_deletion_group = bidir_conflict_resolution_group.add_mutually_exclusive_group()
         bidir_conflict_resolution_change_deletion_group.add_argument('-cod', '--change-wins-over-deletion', help="in case of conflict, changed/new file wins over deleted file", default=False, action='store_true')
         bidir_conflict_resolution_change_deletion_group.add_argument('-doc', '--deletion-wins-over-change', help="in case of conflict, deleted file wins over changed/new file", default=False, action='store_true')
-        bidir_conflict_resolution_group.add_argument('-l', '--local-wins-patterns', nargs='+', metavar="PATTERN", help="in case of conflict, local files matching this Unix shell PATTERN win, multiple values are allowed, separated by space", default=[])
-        bidir_conflict_resolution_group.add_argument('-r', '--remote-wins-patterns', nargs='+', metavar="PATTERN", help="in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space", default=[])
+        bidir_conflict_resolution_group.add_argument('-l', '--local-wins-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, local files matching this Unix shell PATTERN win, multiple values are allowed, separated by space\n"
+                                                      "if no PATTERN is specified, local always wins")
+        bidir_conflict_resolution_group.add_argument('-r', '--remote-wins-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space\n"
+                                                      "if no PATTERN is specified, remote always wins")
 
         unidir_conflict_resolution_group = parser.add_argument_group('unidirectional conflict resolution')
         unidir_conflict_resolution_group.add_argument('-m', '--mirror', nargs='*', metavar="PATTERN", help="in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space\n"
@@ -1500,7 +1504,7 @@ def main():
         logger.prepare(args.timestamp or args.debug, args.silent, args.silent_scanning, args.silent_headers)
 
         if args.unidirectional_inward or args.unidirectional_outward:
-            if args.newer_wins or args.older_wins or args.change_wins_over_deletion or args.deletion_wins_over_change or args.local_wins_patterns or args.remote_wins_patterns:
+            if args.newer_wins or args.older_wins or args.change_wins_over_deletion or args.deletion_wins_over_change or args.local_wins_patterns is not None or args.remote_wins_patterns is not None:
                 raise ValueError("Can't specify bidirectional options for unidirectional sync")
         else:
             if args.mirror is not None:
@@ -1508,15 +1512,23 @@ def main():
 
         global options
         options = Options(
-            use_mtime_for_comparison=args.use_mtime_for_comparison, use_content_for_comparison=args.use_content_for_comparison, use_hash_for_content_comparison=args.use_hash_for_content_comparison,
-            newer_wins=args.newer_wins, older_wins=args.older_wins,
-            change_wins_over_deletion=args.change_wins_over_deletion, deletion_wins_over_change=args.deletion_wins_over_change,
-            local_wins_patterns=set(args.local_wins_patterns), remote_wins_patterns=set(args.remote_wins_patterns),
+            use_mtime_for_comparison=args.use_mtime_for_comparison,
+            use_content_for_comparison=args.use_content_for_comparison,
+            use_hash_for_content_comparison=args.use_hash_for_content_comparison,
+            newer_wins=args.newer_wins,
+            older_wins=args.older_wins,
+            change_wins_over_deletion=args.change_wins_over_deletion,
+            deletion_wins_over_change=args.deletion_wins_over_change,
+            local_wins=(args.local_wins_patterns is not None and len(args.local_wins_patterns) == 0),
+            local_wins_patterns=set(args.local_wins_patterns or []),
+            remote_wins=(args.remote_wins_patterns is not None and len(args.remote_wins_patterns) == 0),
+            remote_wins_patterns=set(args.remote_wins_patterns or []),
             mirror=(args.mirror is not None and len(args.mirror) == 0),
             mirror_patterns=set(args.mirror or []),
             valid_chars=dict({k: v for k, v in zip(["[", "]"], [c for c in (args.valid_chars if len(args.valid_chars) >=2 else args.valid_chars + args.valid_chars)])}) if args.valid_chars else None,
             remote_state_prefix=args.remote_state_prefix,
-            dry=args.dry, dry_on_conflict=args.dry_on_conflict,
+            dry=args.dry,
+            dry_on_conflict=args.dry_on_conflict,
             overwrite_destination=args.overwrite_destination,
             ignore_locks=args.ignore_locks
         )
