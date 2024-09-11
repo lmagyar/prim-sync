@@ -1,7 +1,4 @@
 
-> [!CAUTION]
-> ***This repository is in alpha***
-
 > [!WARNING]
 > ***This repository currently works much better with my modified version of the Primitive FTPd Android SFTP server!***
 > - ***install my fork from https://github.com/lmagyar/prim-ftpd - and use all the new features and bugfixes***
