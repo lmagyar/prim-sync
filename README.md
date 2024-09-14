@@ -203,6 +203,25 @@ Notes:
 - You can brainwash (ie. delete the state under the .prim-sync folder) between two runs. After this, the script will behave, as if the next run is the first run (see "first run" above).
 - Never ever delete any files where the name ends with .prim-sync.new or .tmp or .old, the pure existence of these files are the "transaction state", if you delete any of these files, the recovery algorythm won't be able to figure out in which phase got the restartable operation interrupted. If you delete any of these files, you are on your own to figure out how to recover from the interruption.
 
+### Some example
+
+<details><summary>Unix</summary>
+
+```
+prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
+prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -uo -m --overwrite-destination "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
+prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -a your.phone.host.name 2222 "~/Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
+```
+</details>
+<details><summary>Windows</summary>
+
+```
+prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
+prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -uo -m --overwrite-destination "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
+prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -a your.phone.host.name 2222 "D:\Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
+```
+</details>
+
 ### Options
 
 ```
@@ -269,22 +288,3 @@ unidirectional conflict resolution:
                                      in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space
                                      if no PATTERN is specified, all files will be mirrored
 ```
-
-### Some example
-
-<details><summary>Unix</summary>
-
-```
-prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
-prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -uo -m --overwrite-destination "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
-prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -a your.phone.host.name 2222 "~/Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
-```
-</details>
-<details><summary>Windows</summary>
-
-```
-prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
-prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -uo -m --overwrite-destination "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
-prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -a your.phone.host.name 2222 "D:\Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
-```
-</details>
