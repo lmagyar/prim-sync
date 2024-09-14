@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "prim-sync"
+version = "0.4.0rc3"
+description = "Primitive Sync - Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the Primitive FTPd Android SFTP server."
+license = "Apache-2.0"
+authors = ["Laszlo Magyar <lmagyar1973@gmail.com>"]
+readme = "README.md"
+repository = "https://github.com/lmagyar/prim-sync"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Operating System :: OS Independent",
+]
+packages = [{include = "prim_sync"}]
+
+[tool.poetry.urls]
+"Change Log" = "https://github.com/lmagyar/prim-sync/blob/main/CHANGELOG.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+paramiko = "3.4.1"
+platformdirs = "4.3.2"
+zeroconf = "0.134.0"
+
+[tool.poetry.scripts]
+prim-sync = "prim_sync.__main__:run"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

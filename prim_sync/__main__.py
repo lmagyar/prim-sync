@@ -769,6 +769,13 @@ class Remote:
         self._unlock()
 
 class Storage:
+    class Unpickler(pickle.Unpickler):
+        def find_class(self, module, name):
+            try:
+                return super().find_class(__name__, name)
+            except AttributeError:
+                return super().find_class(module, name)
+
     def __init__(self, local_path: str, server_name: str):
         self.state_path = Path(local_path) / STATE_DIR_NAME
         self.state_filename = str(self.state_path / server_name)
@@ -806,7 +813,7 @@ class Storage:
 
         if os.path.exists(self.state_filename) and os.path.isfile(self.state_filename):
             with open(self.state_filename, "rb") as in_file:
-                return pickle.load(in_file)
+                return Storage.Unpickler(in_file).load()
         else:
             return (dict(), dict())
 
@@ -1596,7 +1603,8 @@ def main():
             else:
                 logger.error(LazyStr(repr, e))
 
-if __name__ == "__main__":
+    return logger.exitcode
+
+def run():
     with suppress(KeyboardInterrupt):
-        main()
-    exit(logger.exitcode)
+        exit(main())

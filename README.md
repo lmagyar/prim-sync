@@ -42,8 +42,11 @@ See my other project, https://github.com/lmagyar/prim-ctrl, for remote control o
 ## Installation
 
 You need to install:
-- Primitive FTPd on your phone - see: https://github.com/wolpi/prim-ftpd **use the F-Droid version!**
-- Python 3.12+, pip and venv - see: https://www.python.org/downloads/ or
+- Primitive FTPd on your phone
+  - My forked version - see: https://github.com/lmagyar/prim-ftpd **download from [Releases](https://github.com/lmagyar/prim-ftpd/releases)**
+  - Original version - see: https://github.com/wolpi/prim-ftpd **install from [F-Droid](https://f-droid.org/app/org.primftpd) (not from Google Play)**
+
+- Python 3.12+, pip and venv on your laptop - see: https://www.python.org/downloads/ or
   <details><summary>Unix</summary>
 
   ```
@@ -54,31 +57,36 @@ You need to install:
   </details>
   <details><summary>Windows</summary>
 
-  ```
-  choco install python3 -y
-  ```
+  - Install from Microsoft Store the latest [Python 3](https://apps.microsoft.com/search?query=python+3&department=Apps) (search), [Python 3.12](https://www.microsoft.com/store/productId/9NCVDN91XZQP) (App)
+  - Install from Chocolatey: `choco install python3 -y`
   </details>
-- This repo
+
+- pipx - see: https://pipx.pypa.io/stable/installation/#installing-pipx or
   <details><summary>Unix</summary>
 
   ```
-  git clone https://github.com/lmagyar/prim-sync
-  cd prim-sync
-  python3 -m venv --upgrade-deps .venv
-  source .venv/bin/activate
-  pip install -r requirements.txt
+  python3 -m pip install --user pipx
+  python3 -m pipx ensurepath
   ```
   </details>
   <details><summary>Windows</summary>
 
   ```
-  git clone https://github.com/lmagyar/prim-sync
-  cd prim-sync
-  py -m venv --upgrade-deps .venv
-  .venv\Scripts\activate
-  pip install -r requirements.txt
+  py -m pip install --user pipx
+  py -m pipx ensurepath
   ```
   </details>
+
+- This repo
+  ```
+  pipx install prim-sync
+  ```
+
+Optionally, if you want to edit or even contribute to the source, you also need to install:
+- poetry - see: https://python-poetry.org/
+  ```
+  pipx install poetry
+  ```
 
 ## Configuration
 
@@ -88,7 +96,7 @@ You have to enable Primitive FTPd to run as much in the background as possible, 
 
 ### Networking
 
-Either use the built-in zeroconf (DNS-SD) functionality in Primitive FTPd (see below), or set up a constant address (IP or host name) for your phone (fixed LAN IP, VPN, hosts file, your choice).
+Either use the built-in zeroconf (DNS-SD) functionality in Primitive FTPd (see below), or set up a constant address (IP or host name, for the -a option) for your phone (fixed LAN IP, VPN, hosts file, your choice).
 
 ### Primitive FTPd
 
@@ -108,7 +116,7 @@ Either use the built-in zeroconf (DNS-SD) functionality in Primitive FTPd (see b
   - UI
     - This is based on your preferences
   - System
-    - Server Start Directory: /storage/emulated/0
+    - Server Start Directory: eg. /storage/emulated/0
     - Prevent Standby: enable
     - Announce server in LAN: enable if you use zeroconf (DNS-SD)
     - Servername: make it unique, even if you don't use zeroconf, especially when multiple phones are synced, because this will be used as unique identifier to store the per-device-sync-state between runs
@@ -174,7 +182,7 @@ Then add your phone to the known_hosts file if your favorite SFTP client hasn't 
 
 Create a backup of your files!!! Really!!! If you use symlinks, this is only question of time when will you delete something unintendedly!!!
 
-The first upload is better done over USB connection and manual copy, because copying files over Wi-Fi is much slower. The prim-sync script handles both this upload and the changes in the future.
+The first upload is better done over USB connection and manual copy, because copying files over Wi-Fi is much slower. The prim-sync script handles both this "external" upload and the changes in the future.
 
 The first run will be longer than a regular run, because without prior knowledge, the prim-sync script handles all files on both sides as newly created and compares them or their hashes (hashing is much faster than downloading and comparing the content).
 
@@ -188,6 +196,7 @@ On regular runs the meaning of the log lines are:
 - CHANGED - The destination file changed after the decision is made to update it and before it replaced by the new content, this conflict will be handled on the next run.
 
 Notes:
+- In the log lines the left side is the Local and the right side is the Remote
 - Local file creation times (birthtime) are:
   - preserved on Windows but not on Unix when the default restartable operation is used
   - unchanged when --overwrite-destination option is used
@@ -197,9 +206,9 @@ Notes:
 ### Options
 
 ```
-usage: prim-sync.py [-h] [-a host port] [-ui | -uo] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H] [-n | -o] [-cod | -doc]
-                    [-l [PATTERN ...]] [-r [PATTERN ...]] [-m [PATTERN ...]]
-                    server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
+usage: prim-sync [-h] [-a host port] [-ui | -uo] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H] [-n | -o] [-cod | -doc]
+                 [-l [PATTERN ...]] [-r [PATTERN ...]] [-m [PATTERN ...]]
+                 server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
 
 Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the Primitive FTPd Android SFTP server (https://github.com/wolpi/prim-ftpd), for more details see https://github.com/lmagyar/prim-sync
 
@@ -266,16 +275,16 @@ unidirectional conflict resolution:
 <details><summary>Unix</summary>
 
 ```
-prim-sync.sh a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
-prim-sync.sh a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -uo -m --overwrite-destination "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
-prim-sync.sh a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -a your.phone.host.name 2222 "~/Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
+prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
+prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -uo -m --overwrite-destination "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
+prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -a your.phone.host.name 2222 "~/Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
 ```
 </details>
 <details><summary>Windows</summary>
 
 ```
-prim-sync.cmd a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
-prim-sync.cmd a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -uo -m --overwrite-destination "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
-prim-sync.cmd a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -a your.phone.host.name 2222 "D:\Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
+prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
+prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -uo -m --overwrite-destination "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
+prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -a your.phone.host.name 2222 "D:\Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
 ```
 </details>
