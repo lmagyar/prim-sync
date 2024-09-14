@@ -1575,16 +1575,17 @@ def main():
                         ssh_connect(host, port, connect_timeout)
                         service_cache.set(args.server_name, host, port)
                 connect(10, 30)
-                with ssh.open_sftp() as sftp:
-                    with Local(local_path) as local:
-                        with Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote:
-                            if args.unidirectional_inward:
-                                sync = UnidirectionalInwardSync(local, remote, Storage(local_path, args.server_name))
-                            elif args.unidirectional_outward:
-                                sync = UnidirectionalOutwardSync(local, remote, Storage(local_path, args.server_name))
-                            else:
-                                sync = BidirectionalSync(local, remote, Storage(local_path, args.server_name))
-                            sync.run()
+                with (ssh.open_sftp() as sftp,
+                        Local(local_path) as local,
+                        Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote):
+                    storage = Storage(local_path, args.server_name)
+                    if args.unidirectional_inward:
+                        sync = UnidirectionalInwardSync(local, remote, storage)
+                    elif args.unidirectional_outward:
+                        sync = UnidirectionalOutwardSync(local, remote, storage)
+                    else:
+                        sync = BidirectionalSync(local, remote, storage)
+                    sync.run()
 
     except Exception as e:
         if not args or args.debug:
