@@ -129,6 +129,7 @@ class Options():
     dry: bool = False
     dry_on_conflict: bool = False
     overwrite_destination: bool = False
+    folder_symlink_as_destination: bool = False
     ignore_locks: int | None = None
 
     def __post_init__(self):
@@ -292,12 +293,19 @@ class Local:
         self.local_path = PurePath(local_path)
         self._lockfile = None
         self._has_unsupported_hardlink = None
+        self._has_unsupported_folder_symlink = None
 
     @property
     def has_unsupported_hardlink(self) -> bool:
         if self._has_unsupported_hardlink is None:
             raise RuntimeError("Local.scandir() has to be called before has_unsupported_hardlink can be accessed")
         return self._has_unsupported_hardlink
+
+    @property
+    def has_unsupported_folder_symlink(self) -> bool:
+        if self._has_unsupported_folder_symlink is None:
+            raise RuntimeError("Local.scandir() has to be called before has_unsupported_folder_symlink can be accessed")
+        return self._has_unsupported_folder_symlink
 
     def scandir(self, is_destination: bool):
         def _scandir(path: PurePosixPath):
@@ -333,6 +341,10 @@ class Local:
                 if relative_name == STATE_DIR_NAME or relative_name == LOCK_FILE_NAME:
                     continue
                 if entry.is_dir(follow_symlinks=True):
+                    if is_destination and not options.folder_symlink_as_destination:
+                        if entry.is_symlink() or entry.is_junction():
+                            logger.warning("<<< SYMLINK %s", relative_name)
+                            self._has_unsupported_folder_symlink = True
                     yield relative_name + '/', None
                     yield from _scandir(relative_path)
                 else:
@@ -352,6 +364,7 @@ class Local:
                         btime=datetime.fromtimestamp(stat.st_birthtime if SETFILETIME_SUPPORTED else 0, timezone.utc),
                         symlink_target=str(Path(self.local_path / relative_path).resolve(strict=True)) if entry.is_symlink() else None)
         self._has_unsupported_hardlink = False
+        self._has_unsupported_folder_symlink = False
         yield from _scandir(PurePosixPath(''))
 
     def remove(self, relative_path: str, fileinfo: FileInfo | None):
@@ -888,10 +901,11 @@ class Sync:
 
         self.local_previous, self.remote_previous = self.storage.load_psync_info()
         self.local_current = dict(sorted(self.local.scandir(self.is_local_destination)))
-        self.remote_current = dict(sorted(self.remote.scandir()))
-
         if self.local.has_unsupported_hardlink:
             raise RuntimeError("Hardlinks can't be used on local side as destination without enabling --overwrite-destination option")
+        if self.local.has_unsupported_folder_symlink:
+            raise RuntimeError("Folder symlinks or junctions can't be used on local side as destination without enabling --folder-symlink-as-destination option")
+        self.remote_current = dict(sorted(self.remote.scandir()))
 
         self.local_new = _new_entries(self.local_current, self.local_previous)
         self.local_deleted = _deleted_entries(self.local_current, self.local_previous)
@@ -1478,6 +1492,7 @@ def main():
                             "Note: currently only the .lock file is stored here\n"
                             "Note: if you access the same server from multiple clients, you have to specify the same --remote-state-prefix option everywhere to prevent concurrent access")
         parser.add_argument('--overwrite-destination', help="don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot when used with bidirectional sync", default=False, action='store_true')
+        parser.add_argument('--folder-symlink-as-destination', help="enables writing and deleting symlinked folders and files in them on the local side - it can make sense, but you will definitely shoot yourself in the foot", default=False, action='store_true')
         parser.add_argument('--ignore-locks', nargs='?', metavar="MINUTES", help="ignore locks left over from previous run, optionally only if they are older than MINUTES minutes", type=int, default=None, const=0, action='store')
 
         logging_group = parser.add_argument_group('logging')
@@ -1541,6 +1556,7 @@ def main():
             dry=args.dry,
             dry_on_conflict=args.dry_on_conflict,
             overwrite_destination=args.overwrite_destination,
+            folder_symlink_as_destination=args.folder_symlink_as_destination,
             ignore_locks=args.ignore_locks
         )
 

@@ -195,6 +195,7 @@ On regular runs the meaning of the log lines are:
 - RECOVER - The previous run failed (probably network/connection problem), and there are intermediate/leftover files that are deleted on the next (ie. this) run.
 - INVALID - Invalid characters in the filename are replaced because --valid-chars command line option is used.
 - HARDLNK - There are hardlinks on the destination side and --overwrite-destination command line option is not used.
+- SYMLINK - There are folder symlinks or junctions on the destination side and --folder-symlink-as-destination command line option is not used.
 - CHANGED - The destination file changed after the decision is made to update it and before it replaced by the new content, this conflict will be handled on the next run.
 
 Notes:
@@ -227,8 +228,8 @@ prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -
 ### Options
 
 ```
-usage: prim-sync [-h] [-a host port] [-ui | -uo] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H] [-n | -o] [-cod | -doc]
-                 [-l [PATTERN ...]] [-r [PATTERN ...]] [-m [PATTERN ...]]
+usage: prim-sync [-h] [-a host port] [-ui | -uo] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--folder-symlink-as-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H]
+                 [-n | -o] [-cod | -doc] [-l [PATTERN ...]] [-r [PATTERN ...]] [-m [PATTERN ...]]
                  server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
 
 Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the Primitive FTPd Android SFTP server (https://github.com/wolpi/prim-ftpd), for more details see https://github.com/lmagyar/prim-sync
@@ -256,6 +257,7 @@ options:
                                      Note: currently only the .lock file is stored here
                                      Note: if you access the same server from multiple clients, you have to specify the same --remote-state-prefix option everywhere to prevent concurrent access
   --overwrite-destination            don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot when used with bidirectional sync
+  --folder-symlink-as-destination    enables writing and deleting symlinked folders and files in them on the local side - it can make sense, but you will definitely shoot yourself in the foot
   --ignore-locks [MINUTES]           ignore locks left over from previous run, optionally only if they are older than MINUTES minutes
 
 logging:
