@@ -1505,7 +1505,7 @@ def main():
                                                       "if no PATTERN is specified, remote always wins")
 
         unidir_conflict_resolution_group = parser.add_argument_group('unidirectional conflict resolution')
-        unidir_conflict_resolution_group.add_argument('-m', '--mirror', nargs='*', metavar="PATTERN", help="in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space\n"
+        unidir_conflict_resolution_group.add_argument('-m', '--mirror-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space\n"
                                                       "if no PATTERN is specified, all files will be mirrored")
 
         args = parser.parse_args()
@@ -1518,7 +1518,7 @@ def main():
             if args.newer_wins or args.older_wins or args.change_wins_over_deletion or args.deletion_wins_over_change or args.local_wins_patterns is not None or args.remote_wins_patterns is not None:
                 raise ValueError("Can't specify bidirectional options for unidirectional sync")
         else:
-            if args.mirror is not None:
+            if args.mirror_patterns is not None:
                 raise ValueError("Can't specify unidirectional options for bidirectional sync")
 
         global options
@@ -1534,8 +1534,8 @@ def main():
             local_wins_patterns=set(args.local_wins_patterns or []),
             remote_wins=(args.remote_wins_patterns is not None and len(args.remote_wins_patterns) == 0),
             remote_wins_patterns=set(args.remote_wins_patterns or []),
-            mirror=(args.mirror is not None and len(args.mirror) == 0),
-            mirror_patterns=set(args.mirror or []),
+            mirror=(args.mirror_patterns is not None and len(args.mirror_patterns) == 0),
+            mirror_patterns=set(args.mirror_patterns or []),
             valid_chars=dict({k: v for k, v in zip(["[", "]"], [c for c in (args.valid_chars if len(args.valid_chars) >=2 else args.valid_chars + args.valid_chars)])}) if args.valid_chars else None,
             remote_state_prefix=args.remote_state_prefix,
             dry=args.dry,

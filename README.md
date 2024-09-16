@@ -286,7 +286,7 @@ bidirectional conflict resolution:
                                      if no PATTERN is specified, remote always wins
 
 unidirectional conflict resolution:
-  -m [PATTERN ...], --mirror [PATTERN ...]
+  -m [PATTERN ...], --mirror-patterns [PATTERN ...]
                                      in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space
                                      if no PATTERN is specified, all files will be mirrored
 ```

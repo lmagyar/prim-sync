@@ -2,6 +2,7 @@
 
 ## vNext
 
+- Rename --mirror to --mirror-patterns
 - Publish on PyPI
 - Use python-poetry
 
