@@ -1078,6 +1078,7 @@ class Sync:
 # <!> conflict
 
 class BidirectionalSync(Sync):
+    @property
     def is_local_destination(self) -> bool:
         return True
 
@@ -1210,6 +1211,7 @@ class BidirectionalSync(Sync):
 # <!  conflict to download
 
 class UnidirectionalInwardSync(Sync):
+    @property
     def is_local_destination(self) -> bool:
         return True
 
@@ -1321,6 +1323,7 @@ class UnidirectionalInwardSync(Sync):
 #  !> conflict to upload
 
 class UnidirectionalOutwardSync(Sync):
+    @property
     def is_local_destination(self) -> bool:
         return False
 
