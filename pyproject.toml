@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "prim-sync"
-version = "0.4.0rc4"
+version = "0.4.0rc5"
 description = "Primitive Sync - Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the Primitive FTPd Android SFTP server."
 license = "Apache-2.0"
 authors = ["Laszlo Magyar <lmagyar1973@gmail.com>"]
