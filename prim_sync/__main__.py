@@ -936,11 +936,11 @@ class Sync:
         if options.dry_on_conflict and self.conflict:
             options.dry = True
 
-        if options.dry:
+        if options.dry and (self.delete_local or self.delete_remote or self.download or self.upload):
             logger.info("!!!!!!!!!!! Running dry! No deletion, creation, upload or download will be executed!")
 
         for relative_path in chain(sorted({p for p in self.delete_local if not p.endswith('/')}, key=lambda p: (p.count('/'), p)),  # first delete files
-                sorted({p for p in self.delete_local if p.endswith('/')}, key=lambda p: (-p.count('/'), p))):                      # then folders, starting deep
+                sorted({p for p in self.delete_local if p.endswith('/')}, key=lambda p: (-p.count('/'), p))):                       # then folders, starting deep
             logger.info("<<< DEL     %s", relative_path)
             if not options.dry:
                 if self.local.remove(relative_path, self.local_current[relative_path]):
@@ -949,7 +949,7 @@ class Sync:
                     logger.info("< CHANGED     will be processed only on the next run")
 
         for relative_path in chain(sorted({p for p in self.delete_remote if not p.endswith('/')}, key=lambda p: (p.count('/'), p)), # first delete files
-                sorted({p for p in self.delete_remote if p.endswith('/')}, key=lambda p: (-p.count('/'), p))):                     # then folders, starting deep
+                sorted({p for p in self.delete_remote if p.endswith('/')}, key=lambda p: (-p.count('/'), p))):                      # then folders, starting deep
             logger.info("    DEL >>> %s", relative_path)
             if not options.dry:
                 if self.remote.remove(relative_path, self.remote_current[relative_path]):
@@ -958,7 +958,7 @@ class Sync:
                     logger.info("  CHANGED >   will be processed only on the next run")
 
         for relative_path in chain(sorted({p for p in self.download if p.endswith('/')}, key=lambda p: (p.count('/'), p)),          # first create folders
-                sorted({p for p in self.download if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                       # then download files
+                sorted({p for p in self.download if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                        # then download files
             if relative_path.endswith('/'):
                 logger.info("<<<<<<<     %s", relative_path)
                 if not options.dry:
@@ -974,7 +974,7 @@ class Sync:
                         logger.info("< CHANGED >   will be processed only on the next run")
 
         for relative_path in chain(sorted({p for p in self.upload if p.endswith('/')}, key=lambda p: (p.count('/'), p)),            # first create folders
-                sorted({p for p in self.upload if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                         # then upload files
+                sorted({p for p in self.upload if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                          # then upload files
             if relative_path.endswith('/'):
                 logger.info("    >>>>>>> %s", relative_path)
                 if not options.dry:
