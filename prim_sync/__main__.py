@@ -408,9 +408,11 @@ class Local:
     def download(self, relative_path: str, remote_open_fn, remote_stat_fn, local_fileinfo: LocalFileInfo | None, remote_fileinfo: FileInfo):
         def _copy(to_full_path: str):
             try:
-                with remote_open_fn(relative_path) as remote_file:
-                    with open(to_full_path, "wb") as local_file:
-                        shutil.copyfileobj(remote_file, local_file)
+                with (
+                    remote_open_fn(relative_path) as remote_file,
+                    open(to_full_path, "wb") as local_file
+                ):
+                    shutil.copyfileobj(remote_file, local_file)
                 return True
             except IOError:
                 return False # any error on any side
@@ -632,9 +634,11 @@ class Remote:
     def upload(self, local_open_fn, local_stat_fn, relative_path: str, local_fileinfo: FileInfo, remote_fileinfo: FileInfo | None):
         def _copy(to_full_path: str):
             try:
-                with local_open_fn(relative_path) as local_file:
-                    with self.sftp.open(to_full_path, "w") as remote_file:
-                        shutil.copyfileobj(local_file, remote_file)
+                with (
+                    local_open_fn(relative_path) as local_file,
+                    self.sftp.open(to_full_path, "w") as remote_file
+                ):
+                    shutil.copyfileobj(local_file, remote_file)
                 return True
             except IOError:
                 return False # any error on any side
@@ -1582,9 +1586,11 @@ def main():
                         ssh_connect(host, port, connect_timeout)
                         service_cache.set(args.server_name, host, port)
                 connect(10, 30)
-                with (ssh.open_sftp() as sftp,
-                        Local(local_path) as local,
-                        Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote):
+                with (
+                    ssh.open_sftp() as sftp,
+                    Local(local_path) as local,
+                    Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote
+                ):
                     storage = Storage(local_path, args.server_name)
                     if args.unidirectional_inward:
                         sync = UnidirectionalInwardSync(local, remote, storage)
