@@ -208,17 +208,17 @@ Notes:
 <details><summary>Unix</summary>
 
 ```
-prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
-prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -uo -m --overwrite-destination "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
-prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -a your.phone.host.name 2222 "~/Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
+prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
+prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -uo -m --overwrite-destination "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
+prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -a your.phone.host.name 2222 "~/Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
 ```
 </details>
 <details><summary>Windows</summary>
 
 ```
-prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
-prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -uo -m --overwrite-destination "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
-prim-sync a-unique-server-name id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -a your.phone.host.name 2222 "D:\Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
+prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
+prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -uo -m --overwrite-destination "D:\Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Music" "*"
+prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -a your.phone.host.name 2222 "D:\Mobile" "/fs/storage/emulated/0" "*" "Screenshots" "DCIM/Screenshots"
 ```
 </details>
 
