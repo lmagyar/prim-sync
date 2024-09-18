@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.4.0
 
 - Add server-name validation for prim-ftpd and --dont-validate-server-name option
 - Rename --mirror to --mirror-patterns
