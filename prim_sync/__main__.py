@@ -2,6 +2,7 @@
 from abc import abstractmethod
 import argparse
 import hashlib
+import json
 import logging
 import os
 import pickle
@@ -129,6 +130,7 @@ class Options():
     dry: bool = False
     dry_on_conflict: bool = False
     overwrite_destination: bool = False
+    folder_symlink_as_destination: bool = False
     ignore_locks: int | None = None
 
     def __post_init__(self):
@@ -292,12 +294,19 @@ class Local:
         self.local_path = PurePath(local_path)
         self._lockfile = None
         self._has_unsupported_hardlink = None
+        self._has_unsupported_folder_symlink = None
 
     @property
     def has_unsupported_hardlink(self) -> bool:
         if self._has_unsupported_hardlink is None:
             raise RuntimeError("Local.scandir() has to be called before has_unsupported_hardlink can be accessed")
         return self._has_unsupported_hardlink
+
+    @property
+    def has_unsupported_folder_symlink(self) -> bool:
+        if self._has_unsupported_folder_symlink is None:
+            raise RuntimeError("Local.scandir() has to be called before has_unsupported_folder_symlink can be accessed")
+        return self._has_unsupported_folder_symlink
 
     def scandir(self, is_destination: bool):
         def _scandir(path: PurePosixPath):
@@ -333,6 +342,10 @@ class Local:
                 if relative_name == STATE_DIR_NAME or relative_name == LOCK_FILE_NAME:
                     continue
                 if entry.is_dir(follow_symlinks=True):
+                    if is_destination and not options.folder_symlink_as_destination:
+                        if entry.is_symlink() or entry.is_junction():
+                            logger.warning("<<< SYMLINK %s", relative_name)
+                            self._has_unsupported_folder_symlink = True
                     yield relative_name + '/', None
                     yield from _scandir(relative_path)
                 else:
@@ -352,6 +365,7 @@ class Local:
                         btime=datetime.fromtimestamp(stat.st_birthtime if SETFILETIME_SUPPORTED else 0, timezone.utc),
                         symlink_target=str(Path(self.local_path / relative_path).resolve(strict=True)) if entry.is_symlink() else None)
         self._has_unsupported_hardlink = False
+        self._has_unsupported_folder_symlink = False
         yield from _scandir(PurePosixPath(''))
 
     def remove(self, relative_path: str, fileinfo: FileInfo | None):
@@ -408,9 +422,11 @@ class Local:
     def download(self, relative_path: str, remote_open_fn, remote_stat_fn, local_fileinfo: LocalFileInfo | None, remote_fileinfo: FileInfo):
         def _copy(to_full_path: str):
             try:
-                with remote_open_fn(relative_path) as remote_file:
-                    with open(to_full_path, "wb") as local_file:
-                        shutil.copyfileobj(remote_file, local_file)
+                with (
+                    remote_open_fn(relative_path) as remote_file,
+                    open(to_full_path, "wb") as local_file
+                ):
+                    shutil.copyfileobj(remote_file, local_file)
                 return True
             except IOError:
                 return False # any error on any side
@@ -632,9 +648,11 @@ class Remote:
     def upload(self, local_open_fn, local_stat_fn, relative_path: str, local_fileinfo: FileInfo, remote_fileinfo: FileInfo | None):
         def _copy(to_full_path: str):
             try:
-                with local_open_fn(relative_path) as local_file:
-                    with self.sftp.open(to_full_path, "w") as remote_file:
-                        shutil.copyfileobj(local_file, remote_file)
+                with (
+                    local_open_fn(relative_path) as local_file,
+                    self.sftp.open(to_full_path, "w") as remote_file
+                ):
+                    shutil.copyfileobj(local_file, remote_file)
                 return True
             except IOError:
                 return False # any error on any side
@@ -769,6 +787,13 @@ class Remote:
         self._unlock()
 
 class Storage:
+    class Unpickler(pickle.Unpickler):
+        def find_class(self, module, name):
+            try:
+                return super().find_class(__name__, name)
+            except AttributeError:
+                return super().find_class(module, name)
+
     def __init__(self, local_path: str, server_name: str):
         self.state_path = Path(local_path) / STATE_DIR_NAME
         self.state_filename = str(self.state_path / server_name)
@@ -806,7 +831,7 @@ class Storage:
 
         if os.path.exists(self.state_filename) and os.path.isfile(self.state_filename):
             with open(self.state_filename, "rb") as in_file:
-                return pickle.load(in_file)
+                return Storage.Unpickler(in_file).load()
         else:
             return (dict(), dict())
 
@@ -877,10 +902,11 @@ class Sync:
 
         self.local_previous, self.remote_previous = self.storage.load_psync_info()
         self.local_current = dict(sorted(self.local.scandir(self.is_local_destination)))
-        self.remote_current = dict(sorted(self.remote.scandir()))
-
         if self.local.has_unsupported_hardlink:
             raise RuntimeError("Hardlinks can't be used on local side as destination without enabling --overwrite-destination option")
+        if self.local.has_unsupported_folder_symlink:
+            raise RuntimeError("Folder symlinks or junctions can't be used on local side as destination without enabling --folder-symlink-as-destination option")
+        self.remote_current = dict(sorted(self.remote.scandir()))
 
         self.local_new = _new_entries(self.local_current, self.local_previous)
         self.local_deleted = _deleted_entries(self.local_current, self.local_previous)
@@ -925,11 +951,11 @@ class Sync:
         if options.dry_on_conflict and self.conflict:
             options.dry = True
 
-        if options.dry:
+        if options.dry and (self.delete_local or self.delete_remote or self.download or self.upload):
             logger.info("!!!!!!!!!!! Running dry! No deletion, creation, upload or download will be executed!")
 
         for relative_path in chain(sorted({p for p in self.delete_local if not p.endswith('/')}, key=lambda p: (p.count('/'), p)),  # first delete files
-                sorted({p for p in self.delete_local if p.endswith('/')}, key=lambda p: (-p.count('/'), p))):                      # then folders, starting deep
+                sorted({p for p in self.delete_local if p.endswith('/')}, key=lambda p: (-p.count('/'), p))):                       # then folders, starting deep
             logger.info("<<< DEL     %s", relative_path)
             if not options.dry:
                 if self.local.remove(relative_path, self.local_current[relative_path]):
@@ -938,7 +964,7 @@ class Sync:
                     logger.info("< CHANGED     will be processed only on the next run")
 
         for relative_path in chain(sorted({p for p in self.delete_remote if not p.endswith('/')}, key=lambda p: (p.count('/'), p)), # first delete files
-                sorted({p for p in self.delete_remote if p.endswith('/')}, key=lambda p: (-p.count('/'), p))):                     # then folders, starting deep
+                sorted({p for p in self.delete_remote if p.endswith('/')}, key=lambda p: (-p.count('/'), p))):                      # then folders, starting deep
             logger.info("    DEL >>> %s", relative_path)
             if not options.dry:
                 if self.remote.remove(relative_path, self.remote_current[relative_path]):
@@ -947,7 +973,7 @@ class Sync:
                     logger.info("  CHANGED >   will be processed only on the next run")
 
         for relative_path in chain(sorted({p for p in self.download if p.endswith('/')}, key=lambda p: (p.count('/'), p)),          # first create folders
-                sorted({p for p in self.download if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                       # then download files
+                sorted({p for p in self.download if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                        # then download files
             if relative_path.endswith('/'):
                 logger.info("<<<<<<<     %s", relative_path)
                 if not options.dry:
@@ -963,7 +989,7 @@ class Sync:
                         logger.info("< CHANGED >   will be processed only on the next run")
 
         for relative_path in chain(sorted({p for p in self.upload if p.endswith('/')}, key=lambda p: (p.count('/'), p)),            # first create folders
-                sorted({p for p in self.upload if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                         # then upload files
+                sorted({p for p in self.upload if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                          # then upload files
             if relative_path.endswith('/'):
                 logger.info("    >>>>>>> %s", relative_path)
                 if not options.dry:
@@ -1053,6 +1079,7 @@ class Sync:
 # <!> conflict
 
 class BidirectionalSync(Sync):
+    @property
     def is_local_destination(self) -> bool:
         return True
 
@@ -1185,6 +1212,7 @@ class BidirectionalSync(Sync):
 # <!  conflict to download
 
 class UnidirectionalInwardSync(Sync):
+    @property
     def is_local_destination(self) -> bool:
         return True
 
@@ -1296,6 +1324,7 @@ class UnidirectionalInwardSync(Sync):
 #  !> conflict to upload
 
 class UnidirectionalOutwardSync(Sync):
+    @property
     def is_local_destination(self) -> bool:
         return False
 
@@ -1440,6 +1469,9 @@ class WideHelpFormatter(argparse.RawTextHelpFormatter):
     def __init__(self, prog: str, indent_increment: int = 2, max_help_position: int = 37, width: int | None = None) -> None:
         super().__init__(prog, indent_increment, max_help_position, width)
 
+class ServerDifferentError(RuntimeError):
+    pass
+
 def main():
     args = None
     try:
@@ -1456,6 +1488,7 @@ def main():
         parser.add_argument('remote_folder', metavar='remote-folder', help="the remote folder name to be synchronized (you can use * if this is the same as the local folder name above)")
 
         parser.add_argument('-a', '--address', nargs=2, metavar=('host', 'port') , help="if zeroconf is not used, then the address of the server")
+        parser.add_argument('-V', '--dont-validate-server-name', dest="validate_server_name", help="cached zeroconf address and server-name pairing validation is available only with prim-ftpd, disable on other servers", default=True, action='store_false')
         parser_direction_group = parser.add_mutually_exclusive_group()
         parser_direction_group.add_argument('-ui', '--unidirectional-inward', help="unidirectional inward sync (default is bidirectional sync)", default=False, action='store_true')
         parser_direction_group.add_argument('-uo', '--unidirectional-outward', help="unidirectional outward sync (default is bidirectional sync)", default=False, action='store_true')
@@ -1467,6 +1500,7 @@ def main():
                             "Note: currently only the .lock file is stored here\n"
                             "Note: if you access the same server from multiple clients, you have to specify the same --remote-state-prefix option everywhere to prevent concurrent access")
         parser.add_argument('--overwrite-destination', help="don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot when used with bidirectional sync", default=False, action='store_true')
+        parser.add_argument('--folder-symlink-as-destination', help="enables writing and deleting symlinked folders and files in them on the local side - it can make sense, but you will definitely shoot yourself in the foot", default=False, action='store_true')
         parser.add_argument('--ignore-locks', nargs='?', metavar="MINUTES", help="ignore locks left over from previous run, optionally only if they are older than MINUTES minutes", type=int, default=None, const=0, action='store')
 
         logging_group = parser.add_argument_group('logging')
@@ -1494,7 +1528,7 @@ def main():
                                                       "if no PATTERN is specified, remote always wins")
 
         unidir_conflict_resolution_group = parser.add_argument_group('unidirectional conflict resolution')
-        unidir_conflict_resolution_group.add_argument('-m', '--mirror', nargs='*', metavar="PATTERN", help="in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space\n"
+        unidir_conflict_resolution_group.add_argument('-m', '--mirror-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space\n"
                                                       "if no PATTERN is specified, all files will be mirrored")
 
         args = parser.parse_args()
@@ -1507,7 +1541,7 @@ def main():
             if args.newer_wins or args.older_wins or args.change_wins_over_deletion or args.deletion_wins_over_change or args.local_wins_patterns is not None or args.remote_wins_patterns is not None:
                 raise ValueError("Can't specify bidirectional options for unidirectional sync")
         else:
-            if args.mirror is not None:
+            if args.mirror_patterns is not None:
                 raise ValueError("Can't specify unidirectional options for bidirectional sync")
 
         global options
@@ -1523,13 +1557,14 @@ def main():
             local_wins_patterns=set(args.local_wins_patterns or []),
             remote_wins=(args.remote_wins_patterns is not None and len(args.remote_wins_patterns) == 0),
             remote_wins_patterns=set(args.remote_wins_patterns or []),
-            mirror=(args.mirror is not None and len(args.mirror) == 0),
-            mirror_patterns=set(args.mirror or []),
+            mirror=(args.mirror_patterns is not None and len(args.mirror_patterns) == 0),
+            mirror_patterns=set(args.mirror_patterns or []),
             valid_chars=dict({k: v for k, v in zip(["[", "]"], [c for c in (args.valid_chars if len(args.valid_chars) >=2 else args.valid_chars + args.valid_chars)])}) if args.valid_chars else None,
             remote_state_prefix=args.remote_state_prefix,
             dry=args.dry,
             dry_on_conflict=args.dry_on_conflict,
             overwrite_destination=args.overwrite_destination,
+            folder_symlink_as_destination=args.folder_symlink_as_destination,
             ignore_locks=args.ignore_locks
         )
 
@@ -1546,45 +1581,70 @@ def main():
         with Zeroconf() as zeroconf:
             service_cache = ServiceCache(Cache())
             service_resolver = SftpServiceResolver(zeroconf)
-            with paramiko.SSHClient() as ssh:
-                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
-                def connect(connect_timeout: float, resolve_timeout: float):
-                    def ssh_connect(host: str, port: int, timeout: float):
-                        logger.debug("Connecting to %s on port %d (timeout is %d seconds)", host, port, timeout)
-                        ssh.connect(
-                            hostname=host,
-                            port=port,
-                            key_filename=str(Path.home() / ".ssh" / args.keyfile),
-                            passphrase=None,
-                            timeout=timeout)
-                    def service_resolver_get(service_name: str, timeout: float):
-                        logger.debug("Resolving %s (timeout is %d seconds)", service_name, timeout)
-                        return service_resolver.get(service_name, timeout)
-                    if args.address:
-                        ssh_connect(args.address[0], int(args.address[1]), connect_timeout)
-                    else:
-                        host, port = service_cache.get(args.server_name)
-                        if host and port:
+
+            def _connect_sftp_and_sync(zeroconf_cache_enabled: bool):
+                with paramiko.SSHClient() as ssh:
+                    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
+                    def _connect_ssh(connect_timeout: float, resolve_timeout: float):
+                        def _connect(host: str, port: int, timeout: float):
+                            logger.debug("Connecting to %s on port %d (timeout is %d seconds)", host, port, timeout)
+                            ssh.connect(
+                                hostname=host,
+                                port=port,
+                                key_filename=str(Path.home() / ".ssh" / args.keyfile),
+                                passphrase=None,
+                                timeout=timeout)
+                        def _resolve(service_name: str, timeout: float):
+                            logger.debug("Resolving %s (timeout is %d seconds)", service_name, timeout)
+                            return service_resolver.get(service_name, timeout)
+                        if args.address:
+                            _connect(args.address[0], int(args.address[1]), connect_timeout)
+                            return False
+                        else:
+                            if zeroconf_cache_enabled:
+                                host, port = service_cache.get(args.server_name)
+                                if host and port:
+                                    try:
+                                        _connect(host, port, connect_timeout)
+                                        return True
+                                    except (TimeoutError, socket.gaierror, ConnectionRefusedError):
+                                        pass
+                            host, port = _resolve(args.server_name, resolve_timeout)
+                            _connect(host, port, connect_timeout)
+                            service_cache.set(args.server_name, host, port)
+                            return False
+                    connected_with_cached_address = _connect_ssh(10, 30)
+                    with ssh.open_sftp() as sftp:
+                        if connected_with_cached_address and args.validate_server_name:
+                            logger.debug("Validating server name %s on prim-ftpd, because cached address is used", args.server_name)
                             try:
-                                ssh_connect(host, port, connect_timeout)
-                                return
-                            except (TimeoutError, socket.gaierror):
-                                pass
-                        host, port = service_resolver_get(args.server_name, resolve_timeout)
-                        ssh_connect(host, port, connect_timeout)
-                        service_cache.set(args.server_name, host, port)
-                connect(10, 30)
-                with ssh.open_sftp() as sftp:
-                    with Local(local_path) as local:
-                        with Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote:
+                                with sftp.open("/primftpd.config", 'r') as remote_config_file:
+                                    remote_config = json.load(remote_config_file)
+                                if remote_config['announceName'] != args.server_name:
+                                    logger.warning("Connected server is not %s, reconnecting without cache, forcing to resolve service address", args.server_name)
+                                    raise ServerDifferentError()
+                                else:
+                                    logger.debug("Connected server is %s", args.server_name)
+                            except FileNotFoundError as e:
+                                e.add_note("Can't open prim-ftpd configuration file, if you are using a different server, use the -V option")
+                                raise
+                        with (
+                            Local(local_path) as local,
+                            Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote
+                        ):
+                            storage = Storage(local_path, args.server_name)
                             if args.unidirectional_inward:
-                                sync = UnidirectionalInwardSync(local, remote, Storage(local_path, args.server_name))
+                                sync = UnidirectionalInwardSync(local, remote, storage)
                             elif args.unidirectional_outward:
-                                sync = UnidirectionalOutwardSync(local, remote, Storage(local_path, args.server_name))
+                                sync = UnidirectionalOutwardSync(local, remote, storage)
                             else:
-                                sync = BidirectionalSync(local, remote, Storage(local_path, args.server_name))
+                                sync = BidirectionalSync(local, remote, storage)
                             sync.run()
+            try:
+                _connect_sftp_and_sync(True)
+            except ServerDifferentError:
+                _connect_sftp_and_sync(False)
 
     except Exception as e:
         if not args or args.debug:
@@ -1595,7 +1655,8 @@ def main():
             else:
                 logger.error(LazyStr(repr, e))
 
-if __name__ == "__main__":
+    return logger.exitcode
+
+def run():
     with suppress(KeyboardInterrupt):
-        main()
-    exit(logger.exitcode)
+        exit(main())
