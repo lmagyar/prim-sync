@@ -1608,7 +1608,7 @@ def main():
                                     try:
                                         _connect(host, port, connect_timeout)
                                         return True
-                                    except (TimeoutError, socket.gaierror):
+                                    except (TimeoutError, socket.gaierror, ConnectionRefusedError):
                                         pass
                             host, port = _resolve(args.server_name, resolve_timeout)
                             _connect(host, port, connect_timeout)
