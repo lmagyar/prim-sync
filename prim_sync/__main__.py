@@ -2,6 +2,7 @@
 from abc import abstractmethod
 import argparse
 import hashlib
+import json
 import logging
 import os
 import pickle
@@ -1468,6 +1469,9 @@ class WideHelpFormatter(argparse.RawTextHelpFormatter):
     def __init__(self, prog: str, indent_increment: int = 2, max_help_position: int = 37, width: int | None = None) -> None:
         super().__init__(prog, indent_increment, max_help_position, width)
 
+class ServerDifferentError(RuntimeError):
+    pass
+
 def main():
     args = None
     try:
@@ -1484,6 +1488,7 @@ def main():
         parser.add_argument('remote_folder', metavar='remote-folder', help="the remote folder name to be synchronized (you can use * if this is the same as the local folder name above)")
 
         parser.add_argument('-a', '--address', nargs=2, metavar=('host', 'port') , help="if zeroconf is not used, then the address of the server")
+        parser.add_argument('-V', '--dont-validate-server-name', dest="validate_server_name", help="cached zeroconf address and server-name pairing validation is available only with prim-ftpd, disable on other servers", default=True, action='store_false')
         parser_direction_group = parser.add_mutually_exclusive_group()
         parser_direction_group.add_argument('-ui', '--unidirectional-inward', help="unidirectional inward sync (default is bidirectional sync)", default=False, action='store_true')
         parser_direction_group.add_argument('-uo', '--unidirectional-outward', help="unidirectional outward sync (default is bidirectional sync)", default=False, action='store_true')
@@ -1576,48 +1581,70 @@ def main():
         with Zeroconf() as zeroconf:
             service_cache = ServiceCache(Cache())
             service_resolver = SftpServiceResolver(zeroconf)
-            with paramiko.SSHClient() as ssh:
-                ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
-                def connect(connect_timeout: float, resolve_timeout: float):
-                    def ssh_connect(host: str, port: int, timeout: float):
-                        logger.debug("Connecting to %s on port %d (timeout is %d seconds)", host, port, timeout)
-                        ssh.connect(
-                            hostname=host,
-                            port=port,
-                            key_filename=str(Path.home() / ".ssh" / args.keyfile),
-                            passphrase=None,
-                            timeout=timeout)
-                    def service_resolver_get(service_name: str, timeout: float):
-                        logger.debug("Resolving %s (timeout is %d seconds)", service_name, timeout)
-                        return service_resolver.get(service_name, timeout)
-                    if args.address:
-                        ssh_connect(args.address[0], int(args.address[1]), connect_timeout)
-                    else:
-                        host, port = service_cache.get(args.server_name)
-                        if host and port:
+
+            def _connect_sftp_and_sync(zeroconf_cache_enabled: bool):
+                with paramiko.SSHClient() as ssh:
+                    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
+                    def _connect_ssh(connect_timeout: float, resolve_timeout: float):
+                        def _connect(host: str, port: int, timeout: float):
+                            logger.debug("Connecting to %s on port %d (timeout is %d seconds)", host, port, timeout)
+                            ssh.connect(
+                                hostname=host,
+                                port=port,
+                                key_filename=str(Path.home() / ".ssh" / args.keyfile),
+                                passphrase=None,
+                                timeout=timeout)
+                        def _resolve(service_name: str, timeout: float):
+                            logger.debug("Resolving %s (timeout is %d seconds)", service_name, timeout)
+                            return service_resolver.get(service_name, timeout)
+                        if args.address:
+                            _connect(args.address[0], int(args.address[1]), connect_timeout)
+                            return False
+                        else:
+                            if zeroconf_cache_enabled:
+                                host, port = service_cache.get(args.server_name)
+                                if host and port:
+                                    try:
+                                        _connect(host, port, connect_timeout)
+                                        return True
+                                    except (TimeoutError, socket.gaierror):
+                                        pass
+                            host, port = _resolve(args.server_name, resolve_timeout)
+                            _connect(host, port, connect_timeout)
+                            service_cache.set(args.server_name, host, port)
+                            return False
+                    connected_with_cached_address = _connect_ssh(10, 30)
+                    with ssh.open_sftp() as sftp:
+                        if connected_with_cached_address and args.validate_server_name:
+                            logger.debug("Validating server name %s on prim-ftpd, because cached address is used", args.server_name)
                             try:
-                                ssh_connect(host, port, connect_timeout)
-                                return
-                            except (TimeoutError, socket.gaierror):
-                                pass
-                        host, port = service_resolver_get(args.server_name, resolve_timeout)
-                        ssh_connect(host, port, connect_timeout)
-                        service_cache.set(args.server_name, host, port)
-                connect(10, 30)
-                with (
-                    ssh.open_sftp() as sftp,
-                    Local(local_path) as local,
-                    Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote
-                ):
-                    storage = Storage(local_path, args.server_name)
-                    if args.unidirectional_inward:
-                        sync = UnidirectionalInwardSync(local, remote, storage)
-                    elif args.unidirectional_outward:
-                        sync = UnidirectionalOutwardSync(local, remote, storage)
-                    else:
-                        sync = BidirectionalSync(local, remote, storage)
-                    sync.run()
+                                with sftp.open("/primftpd.config", 'r') as remote_config_file:
+                                    remote_config = json.load(remote_config_file)
+                                if remote_config['announceName'] != args.server_name:
+                                    logger.warning("Connected server is not %s, reconnecting without cache, forcing to resolve service address", args.server_name)
+                                    raise ServerDifferentError()
+                                else:
+                                    logger.debug("Connected server is %s", args.server_name)
+                            except FileNotFoundError as e:
+                                e.add_note("Can't open prim-ftpd configuration file, if you are using a different server, use the -V option")
+                                raise
+                        with (
+                            Local(local_path) as local,
+                            Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote
+                        ):
+                            storage = Storage(local_path, args.server_name)
+                            if args.unidirectional_inward:
+                                sync = UnidirectionalInwardSync(local, remote, storage)
+                            elif args.unidirectional_outward:
+                                sync = UnidirectionalOutwardSync(local, remote, storage)
+                            else:
+                                sync = BidirectionalSync(local, remote, storage)
+                            sync.run()
+            try:
+                _connect_sftp_and_sync(True)
+            except ServerDifferentError:
+                _connect_sftp_and_sync(False)
 
     except Exception as e:
         if not args or args.debug:

@@ -228,7 +228,7 @@ prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -
 ### Options
 
 ```
-usage: prim-sync [-h] [-a host port] [-ui | -uo] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--folder-symlink-as-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H]
+usage: prim-sync [-h] [-a host port] [-V] [-ui | -uo] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--folder-symlink-as-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H]
                  [-n | -o] [-cod | -doc] [-l [PATTERN ...]] [-r [PATTERN ...]] [-m [PATTERN ...]]
                  server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
 
@@ -246,6 +246,7 @@ positional arguments:
 options:
   -h, --help                         show this help message and exit
   -a host port, --address host port  if zeroconf is not used, then the address of the server
+  -V, --dont-validate-server-name    cached zeroconf address and server-name pairing validation is available only with prim-ftpd, disable on other servers
   -ui, --unidirectional-inward       unidirectional inward sync (default is bidirectional sync)
   -uo, --unidirectional-outward      unidirectional outward sync (default is bidirectional sync)
   -d, --dry                          no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up

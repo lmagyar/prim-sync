@@ -2,6 +2,7 @@
 
 ## vNext
 
+- Add server-name validation for prim-ftpd and --dont-validate-server-name option
 - Rename --mirror to --mirror-patterns
 - Add --folder-symlink-as-destination
 - Log "Running dry" only when there is something not to execute
