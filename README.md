@@ -67,8 +67,8 @@ You need to install:
   <details><summary>Unix</summary>
 
   ```
-  python3 -m pip install --user pipx
-  python3 -m pipx ensurepath
+  sudo apt install pipx
+  pipx ensurepath
   ```
   </details>
   <details><summary>Windows</summary>
