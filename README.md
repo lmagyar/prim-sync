@@ -2,7 +2,7 @@
 > [!WARNING]
 > ***This repository currently works much better with my modified version of the Primitive FTPd Android SFTP server!***
 > - ***install my fork from https://github.com/lmagyar/prim-ftpd - and use all the new features and bugfixes***
-> - ***install the original version from https://github.com/wolpi/prim-ftpd - and disable hashing (-H option), enable file rename (-v option), and be patient with the extreme slow SD card access (SAF)***
+> - ***install the original version from https://github.com/wolpi/prim-ftpd - and disable hashing (-H option), enable file rename (-v option), disable server name validation (-V option), and be patient with the extreme slow SD card access (SAF)***
 > - ***or wait until the new features got merged into the original version, for the PR's statuses see https://github.com/wolpi/prim-ftpd/pulls/lmagyar***
 
 # Primitive Sync

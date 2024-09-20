@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0
+
+- Update dependencies
+
 ## 0.4.0
 
 - Add server-name validation for prim-ftpd and --dont-validate-server-name option
