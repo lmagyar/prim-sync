@@ -1454,7 +1454,7 @@ class ServiceResolver:
     def get(self, service_name: str, timeout: float = 3):
         service_info = self.zeroconf.get_service_info(self.service_type, f"{service_name}.{self.service_type}", timeout=int(timeout*1000))
         if not service_info or not service_info.port:
-            raise TimeoutError("Unable to resolve zeroconf (DNS-SD) service information")
+            raise TimeoutError("Unable to resolve zeroconf (DNS-SD) service information - if you are using an Android phone as SFTP server, please turn on the screen, because Android doesn't answer DNS-SD queries when the screen is off")
         return (service_info.parsed_addresses()[0], int(service_info.port))
 
 SFTP_SERVICE_TYPE = '_sftp-ssh._tcp.local.'

@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Mention in the error message to turn on Android screen, when DNS-SD queries time out
+
 ## 0.5.0
 
 - Update dependencies
