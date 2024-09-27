@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- Mention in the error message to turn on Android screen, when DNS-SD queries time out
+
 ## 0.5.0
 
 - Update dependencies
@@ -19,7 +23,7 @@
 
 ## 0.2.0
 
-- Enable `-l` and `-r` (`--local-wins-patterns` and `--remote-wins-patterns`) options without pattern, meaning always wins
+- Enable -l and -r (--local-wins-patterns and --remote-wins-patterns) options without pattern, meaning always wins
 
 ## 0.1.0
 
