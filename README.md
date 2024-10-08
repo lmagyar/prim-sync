@@ -60,6 +60,7 @@ You need to install:
   <details><summary>Windows</summary>
 
   - Install from Microsoft Store the latest [Python 3](https://apps.microsoft.com/search?query=python+3&department=Apps) (search), [Python 3.12](https://www.microsoft.com/store/productId/9NCVDN91XZQP) (App)
+  - Install from Winget: `winget install Python.Python.3.12`
   - Install from Chocolatey: `choco install python3 -y`
   </details>
 
