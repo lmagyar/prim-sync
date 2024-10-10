@@ -2,6 +2,7 @@
 
 ## vNext
 
+- Fix zeroconf (DNS-SD) service name resolution in known_hosts file
 - Update Python installation in Readme
 
 ## 0.5.1
