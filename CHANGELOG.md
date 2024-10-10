@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Update Python installation in Readme
+
 ## 0.5.1
 
 - Mention in the error message to turn on Android screen, when DNS-SD queries time out
