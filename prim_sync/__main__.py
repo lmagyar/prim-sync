@@ -1463,6 +1463,19 @@ class SftpServiceResolver(ServiceResolver):
     def __init__(self, zeroconf: Zeroconf):
         super().__init__(zeroconf, SFTP_SERVICE_TYPE)
 
+class ZeroconfHostKeyPolicy(paramiko.MissingHostKeyPolicy):
+    def __init__(self, service_name: str):
+        self.service_name = service_name
+
+    def missing_host_key(self, client, hostname, key):
+        # _host_keys is a non-public attribute, in case of new Paramiko versions, check this line
+        host_keys = client._host_keys.get(self.service_name) # type: ignore
+        if host_keys is None:
+            raise paramiko.SSHException("Server {} not found in known_hosts".format(self.service_name))
+        host_key = host_keys.get(key.get_name())
+        if host_key != key:
+            raise paramiko.BadHostKeyException(hostname, key, host_key)
+
 ########
 
 class WideHelpFormatter(argparse.RawTextHelpFormatter):
@@ -1584,8 +1597,9 @@ def main():
 
             def _connect_sftp_and_sync(zeroconf_cache_enabled: bool):
                 with paramiko.SSHClient() as ssh:
-                    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                     ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
+                    if args.address is None:
+                        ssh.set_missing_host_key_policy(ZeroconfHostKeyPolicy(args.server_name))
                     def _connect_ssh(connect_timeout: float, resolve_timeout: float):
                         def _connect(host: str, port: int, timeout: float):
                             logger.debug("Connecting to %s on port %d (timeout is %d seconds)", host, port, timeout)

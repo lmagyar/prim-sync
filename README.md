@@ -24,6 +24,7 @@ See my other project, https://github.com/lmagyar/prim-batch, for batch execution
 - Write SD card (with Primitive FTPd and Storage Access Framework) ***( !!! fast operation currently requires the forked Primitive FTPd !!! )***
 - Dual access in case of SD card (reading plain-old file-system for fast scan and download, and writing with the slower Storage Access Framework)
 - Failsafe, restartable operation (costs some time, renames on SD card are slow)
+- Connect to zeroconf (DNS-SD) servers
 
 #### Notes on following local symlinks
 
@@ -57,6 +58,7 @@ You need to install:
   <details><summary>Windows</summary>
 
   - Install from Microsoft Store the latest [Python 3](https://apps.microsoft.com/search?query=python+3&department=Apps) (search), [Python 3.12](https://www.microsoft.com/store/productId/9NCVDN91XZQP) (App)
+  - Install from Winget: `winget install Python.Python.3.12`
   - Install from Chocolatey: `choco install python3 -y`
   </details>
 
@@ -118,7 +120,7 @@ Either use the built-in zeroconf (DNS-SD) functionality in Primitive FTPd (see b
     - Server Start Directory: eg. /storage/emulated/0
     - Prevent Standby: enable
     - Announce server in LAN: enable if you use zeroconf (DNS-SD)
-    - Servername: make it unique, even if you don't use zeroconf, especially when multiple phones are synced, because this will be used as unique identifier to store the per-device-sync-state between runs
+    - Servername: eg. your-phone-pftpd - make it unique, even if you don't use zeroconf, especially when multiple phones are synced, because this will be used as unique identifier to store the per-device-sync-state between runs
     - SFTP Hostkey algorithms: enable at least ed25519
     - Other options can be left unchanged
 - Stop the server (if you have started)
@@ -147,11 +149,15 @@ ssh-keygen -t ed25519 -f %USERPROFILE%\.ssh\id_ed25519_sftp -N ""
 
 Then install it in Primitive FTPd:
 - Use your favorite SFTP client (eg. WinSCP, FileZilla) to access the Primitive FTPd, use username/password to authenticate.
+
+  **Note:** Even if you plan to access Primitive FTPd through zeroconf (DNS-SD), use it's hostname or IP to connect to it at this step.
 - Open for editing the `/fs/storage/emulated/0/Android/data/org.primftpd/files/.ssh/authorized_keys` file.
 - Append the content of the previously generated `.ssh/id_ed25519_sftp.pub` file to it. It is something like "ssh-ed25519 XXXxxxXXXxxx you@your-device"
 
 Then add your phone to the known_hosts file if your favorite SFTP client hasn't done it:
 - Use ssh to access the Primitive FTPd, use username/password to authenticate.
+
+  **Note:** Even if you plan to access Primitive FTPd through zeroconf (DNS-SD), use it's hostname or IP to connect to it at this step.
   <details><summary>Unix</summary>
 
   ```
@@ -166,6 +172,18 @@ Then add your phone to the known_hosts file if your favorite SFTP client hasn't 
   </details>
 - Acceph host key
 - The error "shell request failed on channel 0" is OK, there is no SSH server in Primitive FTPd, our goal was to connect and store the server key in the known_hosts file.
+
+If you plan to access Primitive FTPd through zeroconf (DNS-SD):
+- Use your favorite text editor to open the known_hosts file updated in the previous step
+- Locate the line for your server that looks sg. like:
+  ```
+  [your.phone.host.name]:2222 ssh-ed25519 XXXxxxXXXxxx
+  ```
+- Replace the `[your.phone.host.name]:2222` text with the Primitive FTPd Servername configuration option, see above (that is sg. like `your-phone-pftpd`), so it will look sg. like:
+  ```
+  your-phone-pftpd ssh-ed25519 XXXxxxXXXxxx
+  ```
+- Reason: zeroconf (DNS-SD) and SSH don't mix well, SSH uses hostname and DNS-SD uses service name (on a host), but the SSH client in prim-sync is modified to be able to connect to and accept keys from hosts that are identified with the DNS-SD service name (Primitive FTPd Servername configuration option).
 
 ### Primitive FTPd again
 

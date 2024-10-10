@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2
+
+- Fix zeroconf (DNS-SD) service name resolution in known_hosts file
+- Update Python installation in Readme
+
 ## 0.5.1
 
 - Mention in the error message to turn on Android screen, when DNS-SD queries time out
