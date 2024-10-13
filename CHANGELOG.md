@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.6.0
 
 - Remove server-name validation for prim-ftpd and --dont-validate-server-name option
 
