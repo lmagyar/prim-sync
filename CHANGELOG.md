@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- Remove server-name validation for prim-ftpd and --dont-validate-server-name option
+
 ## 0.5.2
 
 - Fix zeroconf (DNS-SD) service name resolution in known_hosts file

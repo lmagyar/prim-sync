@@ -2,7 +2,7 @@
 > [!WARNING]
 > ***This repository currently works much better with my modified version of the Primitive FTPd Android SFTP server!***
 > - ***install my fork from https://github.com/lmagyar/prim-ftpd - and use all the new features and bugfixes***
-> - ***install the original version from https://github.com/wolpi/prim-ftpd - and disable hashing (-H option), enable file rename (-v option), disable server name validation (-V option), and be patient with the extreme slow SD card access (SAF)***
+> - ***install the original version from https://github.com/wolpi/prim-ftpd - and disable hashing (-H option), enable file rename (-v option), and be patient with the extreme slow SD card access (SAF)***
 > - ***or wait until the new features got merged into the original version, for the PR's statuses see https://github.com/wolpi/prim-ftpd/pulls/lmagyar***
 
 # Primitive Sync
@@ -183,6 +183,7 @@ If you plan to access Primitive FTPd through zeroconf (DNS-SD):
   ```
   your-phone-pftpd ssh-ed25519 XXXxxxXXXxxx
   ```
+- Note: If you plan to access Primitive FTPd additionally through -a option also (ie. through VPN), you can have only this single line in your known_hosts file for both connection type.
 - Reason: zeroconf (DNS-SD) and SSH don't mix well, SSH uses hostname and DNS-SD uses service name (on a host), but the SSH client in prim-sync is modified to be able to connect to and accept keys from hosts that are identified with the DNS-SD service name (Primitive FTPd Servername configuration option).
 
 ### Primitive FTPd again
@@ -243,7 +244,7 @@ prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -
 ### Options
 
 ```
-usage: prim-sync [-h] [-a host port] [-V] [-ui | -uo] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--folder-symlink-as-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H]
+usage: prim-sync [-h] [-a host port] [-ui | -uo] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--folder-symlink-as-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H]
                  [-n | -o] [-cod | -doc] [-l [PATTERN ...]] [-r [PATTERN ...]] [-m [PATTERN ...]]
                  server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
 
@@ -261,7 +262,6 @@ positional arguments:
 options:
   -h, --help                         show this help message and exit
   -a host port, --address host port  if zeroconf is not used, then the address of the server
-  -V, --dont-validate-server-name    cached zeroconf address and server-name pairing validation is available only with prim-ftpd, disable on other servers
   -ui, --unidirectional-inward       unidirectional inward sync (default is bidirectional sync)
   -uo, --unidirectional-outward      unidirectional outward sync (default is bidirectional sync)
   -d, --dry                          no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up
