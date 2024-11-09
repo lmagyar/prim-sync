@@ -27,7 +27,7 @@ See my other project, https://github.com/lmagyar/prim-batch, for batch execution
 - Write SD card (with Primitive FTPd and Storage Access Framework) ***( !!! fast operation currently requires the forked Primitive FTPd !!! )***
 - Dual access in case of SD card (reading plain-old file-system for fast scan and download, and writing with the slower Storage Access Framework)
 - Failsafe, restartable operation (costs some time, renames on SD card are slow)
-- Connect to zeroconf (DNS-SD) servers
+- Connect through zeroconf (DNS-SD)
 
 #### Notes on following local symlinks
 
@@ -203,7 +203,7 @@ If you plan to access Primitive FTPd through zeroconf (DNS-SD):
 
 Create a backup of your files!!! Really!!! If you use symlinks, this is only question of time when will you delete something unintendedly!!!
 
-The first upload is better done over USB connection and manual copy, because copying files over Wi-Fi is much slower. The prim-sync script handles both this "external" upload and the changes in the future.
+The first upload is better done over USB connection and manual copy, because copying files over Wi-Fi is much slower.
 
 The first run will be longer than a regular run, because without prior knowledge, the prim-sync script handles all files on both sides as newly created and compares them or their hashes (hashing is much faster than downloading and comparing the content).
 

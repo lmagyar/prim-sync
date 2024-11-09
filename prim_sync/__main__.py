@@ -1,4 +1,6 @@
 
+from __future__ import annotations
+
 from abc import abstractmethod
 import argparse
 import hashlib
@@ -111,7 +113,7 @@ logger = Logger(Path(sys.argv[0]).name)
 ########
 
 @dataclass
-class Options():
+class Options:
     use_mtime_for_comparison: bool = True
     use_content_for_comparison: bool = True
     use_hash_for_content_comparison: bool = True
@@ -239,12 +241,9 @@ class LocalFileInfo(FileInfo):
         self.btime = btime
         self.symlink_target = symlink_target
     def __getstate__(self):
-        state = self.__dict__.copy()
-        # we don't need to remember these
-        del state['btime']
-        del state['symlink_target']
-        return state
+        return FileInfo(self.size, self.mtime).__dict__
     def __setstate__(self, state):
+        # to be able to read the old storage format
         self.__dict__.update(state)
         self.btime = datetime.fromtimestamp(0, timezone.utc)
         self.symlink_target = None
@@ -748,7 +747,14 @@ class Remote:
                 raise RuntimeError(f"The {path} path does not exist")
         def _test_lock_folder(path: str):
             if not _test_folder(path):
-                self.sftp.mkdir(path)
+                try:
+                    logger.debug("SFTP mkdir on %s", path)
+                    self.sftp.mkdir(path)
+                except IOError as e: # FileExistsError
+                    if e.errno == None and e.strerror == None and len(e.args) == 1 and e.args[0] == path:
+                        pass
+                    else:
+                        raise
         logger.debug("Locking remote")
         lock_stat = None
         try:
@@ -1039,8 +1045,9 @@ class Sync:
 
         if not options.dry:
             self.storage.save_psync_info(self.local_current, self.remote_current)
-        else: # even if we didn't changed anything in the file-system, we can remember the fact, that some files are checked by hash/content, and they are de facto identical
+        else:
             if self.identical:
+                # even if we didn't changed anything in the file-system, we can remember the fact, that some files are checked by hash/content, and they are de facto identical
                 for relative_path in self.identical:
                     self.local_previous[relative_path] = self.local_current[relative_path]
                     self.remote_previous[relative_path] = self.remote_current[relative_path]
