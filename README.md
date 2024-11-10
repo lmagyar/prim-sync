@@ -2,15 +2,9 @@
 > [!CAUTION]
 > ***This branch is in alpha***
 
-> [!WARNING]
-> ***This repository currently works much better with my modified version of the Primitive FTPd Android SFTP server!***
-> - ***install my fork from https://github.com/lmagyar/prim-ftpd - and use all the new features and bugfixes***
-> - ***install the original version from https://github.com/wolpi/prim-ftpd - and disable hashing (-H option), enable file rename (-v option), and be patient with the extreme slow SD card access (SAF)***
-> - ***or wait until the new features got merged into the original version, for the PR's statuses see https://github.com/wolpi/prim-ftpd/pulls/lmagyar***
-
 # Primitive Sync
 
-Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the [Primitive FTPd Android SFTP server](https://github.com/wolpi/prim-ftpd).
+Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the [Primitive FTPd Android SFTP server](https://github.com/wolpi/prim-ftpd) (required minimum version is 7.3).
 
 Why another sync solution? Because none of the professional solutions can write SD cards and follow local symlinks, or are extremely slow or full of bugs (Syncthing, Resilio Sync, rsync, osync, rclone, Unison). I gave up and wrote it.
 
@@ -23,8 +17,8 @@ See my other project, https://github.com/lmagyar/prim-batch, for batch execution
 ## Features
 
 - Follow local symlinks
-- Hash files for fast comparison ***( !!! currently requires the forked Primitive FTPd !!! )***
-- Write SD card (with Primitive FTPd and Storage Access Framework) ***( !!! fast operation currently requires the forked Primitive FTPd !!! )***
+- Hash files for fast comparison
+- Write SD card (with Primitive FTPd and Storage Access Framework)
 - Dual access in case of SD card (reading plain-old file-system for fast scan and download, and writing with the slower Storage Access Framework)
 - Failsafe, restartable operation (costs some time, renames on SD card are slow)
 - Connect through zeroconf (DNS-SD)
@@ -46,9 +40,9 @@ See my other project, https://github.com/lmagyar/prim-batch, for batch execution
 ## Installation
 
 You need to install:
-- Primitive FTPd on your phone
-  - My forked version - see: https://github.com/lmagyar/prim-ftpd **download from [Releases](https://github.com/lmagyar/prim-ftpd/releases)**
-  - Original version - see: https://github.com/wolpi/prim-ftpd **install from [F-Droid](https://f-droid.org/app/org.primftpd) (not from Google Play)**
+- Primitive FTPd on your phone - see: https://github.com/wolpi/prim-ftpd
+
+  **Install from [F-Droid](https://f-droid.org/app/org.primftpd) (not from Google Play) (required minimum version is 7.3)**
 
 - Python 3.12+, pip and venv on your laptop - see: https://www.python.org/downloads/ or
   <details><summary>Unix</summary>
