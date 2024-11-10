@@ -207,7 +207,6 @@ On regular runs the meaning of the log lines are:
 - Comparing, Hashing - Comparing the content or the hash of the files on the two sides.
 - <<< !!! >>> - Conflicting changes that are not resolved by any command line option, the details are in the next line.
 - RECOVER - The previous run failed (probably network/connection problem), and there are intermediate/leftover files that are deleted on the next (ie. this) run.
-- INVALID - Invalid characters in the filename are replaced because --valid-chars command line option is used.
 - HARDLNK - There are hardlinks on the destination side and --overwrite-destination command line option is not used.
 - SYMLINK - There are folder symlinks or junctions on the destination side and --folder-symlink-as-destination command line option is not used.
 - CHANGED - The destination file changed after the decision is made to update it and before it replaced by the new content, this conflict will be handled on the next run.
@@ -243,7 +242,7 @@ prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -
 ### Options
 
 ```
-usage: prim-sync [-h] [-a host port] [-ui | -uo] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--folder-symlink-as-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H]
+usage: prim-sync [-h] [-a host port] [-ui | -uo] [-d] [-D] [-rs PATH] [--overwrite-destination] [--folder-symlink-as-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H]
                  [-n | -o] [-cod | -doc] [-l [PATTERN ...]] [-r [PATTERN ...]] [-m [PATTERN ...]]
                  server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
 
@@ -265,8 +264,6 @@ options:
   -uo, --unidirectional-outward      unidirectional outward sync (default is bidirectional sync)
   -d, --dry                          no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up
   -D, --dry-on-conflict              in case of unresolved conflict(s), run dry
-  -v [CHARS], --valid-chars [CHARS]  replace [] chars in filenames with chars from CHARS (1 or 2 chars long, default is '()')
-                                     Note: this is required only for the original Primitive FTPd SAF SD card access, will be removed
   -rs PATH, --remote-state-prefix PATH
                                      stores remote state in a common .prim-sync folder under PATH instead of under the remote-folder argument (decreases SD card wear), eg. /fs/storage/emulated/0
                                      Note: currently only the .lock file is stored here

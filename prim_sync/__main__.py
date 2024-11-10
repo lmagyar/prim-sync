@@ -128,20 +128,12 @@ class Options:
     remote_wins_patterns: set[str] = field(default_factory=set)
     mirror: bool = False
     mirror_patterns: set[str] = field(default_factory=set)
-    valid_chars: dict | None = None
     remote_state_prefix: str | None = None
     dry: bool = False
     dry_on_conflict: bool = False
     overwrite_destination: bool = False
     folder_symlink_as_destination: bool = False
     ignore_locks: int | None = None
-
-    def __post_init__(self):
-        if self.valid_chars and any(c in self.valid_chars.values() for c in r'[]'):
-            raise ValueError("Can't use [ or ] characters in --valid-chars-pattern")
-
-    def valid_filename(self, filename: str):
-        return ''.join([c if c not in self.valid_chars else self.valid_chars[c] for c in filename]) if self.valid_chars else filename
 
 options: Options
 
@@ -341,12 +333,6 @@ class Local:
                     yield relative_name + '/', None
                     yield from _scandir(relative_path)
                 else:
-                    if options.valid_chars and any(c in '[]' for c in entry.name):
-                        valid_relative_name = str(path / options.valid_filename(entry.name))
-                        logger.info("<<< INVALID %s", relative_name)
-                        logger.info("              renaming to: %s", valid_relative_name)
-                        os.rename(self.local_path / relative_name, self.local_path / valid_relative_name)
-                        relative_name = valid_relative_name
                     if is_destination and not options.overwrite_destination:
                         stat = entry.stat(follow_symlinks=False)
                         if stat.st_nlink > 1:
@@ -583,13 +569,6 @@ class Remote:
                     yield relative_name + '/', None
                     yield from _scandir(relative_path)
                 else:
-                    if options.valid_chars and any(c in '[]' for c in entry.filename):
-                        valid_relative_name = str(path / options.valid_filename(entry.filename))
-                        logger.info("INVALID >>> %s", relative_name)
-                        logger.info("              renaming to: %s", valid_relative_name)
-                        # you can rename these files, only writing them on SAF cause error
-                        self.sftp.rename(str(self.remote_write_path / relative_name), str(self.remote_write_path / valid_relative_name))
-                        relative_name = valid_relative_name
                     yield relative_name, FileInfo(size=entry.st_size or 0, mtime=datetime.fromtimestamp(entry.st_mtime or 0, timezone.utc))
         self._timezone_offset_measurement_mtime = datetime.fromtimestamp(self.sftp.stat(str(self.remote_read_path / STATE_DIR_NAME / TIMEZONE_OFFSET_MEASUREMENT_FILE_NAME)).st_mtime or 0, timezone.utc)
         yield from _scandir(PurePosixPath(''))
@@ -1563,8 +1542,6 @@ def main():
         parser_direction_group.add_argument('-uo', '--unidirectional-outward', help="unidirectional outward sync (default is bidirectional sync)", default=False, action='store_true')
         parser.add_argument('-d', '--dry', help="no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up", default=False, action='store_true')
         parser.add_argument('-D', '--dry-on-conflict', help="in case of unresolved conflict(s), run dry", default=False, action='store_true')
-        parser.add_argument('-v', '--valid-chars', nargs='?', metavar="CHARS", help="replace [] chars in filenames with chars from CHARS (1 or 2 chars long, default is '()')\n"
-                            "Note: this is required only for the original Primitive FTPd SAF SD card access, will be removed", default=None, const='()', action='store')
         parser.add_argument('-rs', '--remote-state-prefix', metavar="PATH", help="stores remote state in a common .prim-sync folder under PATH instead of under the remote-folder argument (decreases SD card wear), eg. /fs/storage/emulated/0\n"
                             "Note: currently only the .lock file is stored here\n"
                             "Note: if you access the same server from multiple clients, you have to specify the same --remote-state-prefix option everywhere to prevent concurrent access")
@@ -1628,7 +1605,6 @@ def main():
             remote_wins_patterns=set(args.remote_wins_patterns or []),
             mirror=(args.mirror_patterns is not None and len(args.mirror_patterns) == 0),
             mirror_patterns=set(args.mirror_patterns or []),
-            valid_chars=dict({k: v for k, v in zip(["[", "]"], [c for c in (args.valid_chars if len(args.valid_chars) >=2 else args.valid_chars + args.valid_chars)])}) if args.valid_chars else None,
             remote_state_prefix=args.remote_state_prefix,
             dry=args.dry,
             dry_on_conflict=args.dry_on_conflict,
