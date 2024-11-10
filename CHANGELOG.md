@@ -3,6 +3,7 @@
 ## vNext
 
 - Handle timezone offset changes on remote FAT filesystems
+- Drop reading the old state storage format
 
 ## 0.6.0
 

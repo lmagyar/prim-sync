@@ -240,11 +240,6 @@ class LocalFileInfo(FileInfo):
         self.symlink_target = symlink_target
     def __getstate__(self):
         return FileInfo(self.size, self.mtime).__dict__
-    def __setstate__(self, state):
-        # to be able to read the old storage format
-        self.__dict__.update(state)
-        self.btime = datetime.fromtimestamp(0, timezone.utc)
-        self.symlink_target = None
 
 # File transactions (when restartable operation is used ie. not directly overwriting destination file; these are valid for both local and remote operations)
 #
@@ -867,13 +862,7 @@ class Storage:
 
         if os.path.exists(self.state_filename) and os.path.isfile(self.state_filename):
             with open(self.state_filename, "rb") as in_file:
-                unpickler = Storage.Unpickler(in_file)
-                state = unpickler.load()
-                if isinstance(state, tuple):
-                    # old format
-                    state = cast(tuple[dict, dict], state)
-                    return State(state[0], state[1], None)
-                return cast(State, state)
+                return cast(State, Storage.Unpickler(in_file).load())
         else:
             return State(dict(), dict(), None)
 
