@@ -29,6 +29,7 @@ from zeroconf import Zeroconf
 LOCK_FILE_NAME = '.prim-sync.lock'
 LOCK_FILE_SUFFIX = '.lock'
 STATE_DIR_NAME = '.prim-sync'
+TIMEZONE_OFFSET_MEASUREMENT_FILE_NAME = '.timezone-offset-measurement'
 NEW_FILE_SUFFIX = '.prim-sync.new' # new, tmp and old suffixes have to be the same length
 TMP_FILE_SUFFIX = '.prim-sync.tmp' # new, tmp and old suffixes have to be the same length
 OLD_FILE_SUFFIX = '.prim-sync.old' # new, tmp and old suffixes have to be the same length
@@ -226,14 +227,11 @@ class FileInfo:
         self.mtime = mtime
     def __repr__(self):
         return f'({self.size}, {self.mtime})'
-    def __eq__(self, other):
-        if not isinstance(other, FileInfo):
-            return NotImplemented
-        return self.size == other.size and self.mtime == other.mtime
-    def __ne__(self, other):
-        if not isinstance(other, FileInfo):
-            return NotImplemented
-        return self.size != other.size or self.mtime != other.mtime
+    def is_equal_previous(self, previous: FileInfo, time_shift: timedelta | None):
+        if time_shift is not None:
+            return self.size == previous.size and self.mtime == previous.mtime + time_shift
+        else:
+            return self.size == previous.size and self.mtime == previous.mtime
 
 class LocalFileInfo(FileInfo):
     def __init__(self, size: int, mtime: datetime, btime: datetime, symlink_target: str | None):
@@ -545,6 +543,13 @@ class Remote:
         self.remote_read_path = PurePosixPath(remote_read_path)
         self.remote_write_path = PurePosixPath(remote_write_path)
         self._lockfile = None
+        self._timezone_offset_measurement_mtime = None
+
+    @property
+    def timezone_offset_measurement_mtime(self) -> datetime:
+        if self._timezone_offset_measurement_mtime is None:
+            raise RuntimeError("Local.scandir() has to be called before timezone_offset_measurement_mtime can be accessed")
+        return self._timezone_offset_measurement_mtime
 
     def scandir(self):
         def _scandir(path: PurePosixPath):
@@ -577,7 +582,7 @@ class Remote:
             for entry in entries.values():
                 relative_path = path / entry.filename
                 relative_name = str(relative_path)
-                if relative_name == LOCK_FILE_NAME:
+                if relative_name == STATE_DIR_NAME or relative_name == LOCK_FILE_NAME:
                     continue
                 if stat.S_ISDIR(entry.st_mode or 0):
                     yield relative_name + '/', None
@@ -591,6 +596,7 @@ class Remote:
                         self.sftp.rename(str(self.remote_write_path / relative_name), str(self.remote_write_path / valid_relative_name))
                         relative_name = valid_relative_name
                     yield relative_name, FileInfo(size=entry.st_size or 0, mtime=datetime.fromtimestamp(entry.st_mtime or 0, timezone.utc))
+        self._timezone_offset_measurement_mtime = datetime.fromtimestamp(self.sftp.stat(str(self.remote_read_path / STATE_DIR_NAME / TIMEZONE_OFFSET_MEASUREMENT_FILE_NAME)).st_mtime or 0, timezone.utc)
         yield from _scandir(PurePosixPath(''))
 
     def remove(self, relative_path: str, fileinfo: FileInfo | None):
@@ -727,7 +733,7 @@ class Remote:
             lock_file_name = lock_folder / _remove_first_slash(str(self.remote_write_path) + LOCK_FILE_SUFFIX).replace('/', '#')
             return (str(lock_folder), str(lock_file_name))
 
-    def _lock(self):
+    def _lock_and_initialize(self):
         def _get_stat(file_name: str):
             try:
                 logger.debug("SFTP stat on %s", file_name)
@@ -740,6 +746,14 @@ class Remote:
                 return False
             elif folder_stat.st_mode is None or not stat.S_ISDIR(folder_stat.st_mode):
                 raise RuntimeError(f"The {path} path is not a folder")
+            else:
+                return True
+        def _test_file(path: str):
+            file_stat = _get_stat(path)
+            if file_stat is None:
+                return False
+            elif file_stat.st_mode is None or not stat.S_ISREG(file_stat.st_mode):
+                raise RuntimeError(f"The {path} path is not a file")
             else:
                 return True
         def _test_file_folder(path: str):
@@ -755,6 +769,14 @@ class Remote:
                         pass
                     else:
                         raise
+        def _test_state_folder(path: str):
+            file_name = path + '/' + TIMEZONE_OFFSET_MEASUREMENT_FILE_NAME
+            if not _test_file(file_name):
+                if not _test_folder(path):
+                    logger.debug("SFTP mkdir on %s", path)
+                    self.sftp.mkdir(path)
+                logger.debug("SFTP open+close on %s", file_name)
+                self.sftp.open(file_name, 'w').close()
         logger.debug("Locking remote")
         lock_stat = None
         try:
@@ -768,6 +790,7 @@ class Remote:
             mode = "x" if options.ignore_locks is None or lock_stat is None or lock_stat.st_mtime is None or (datetime.fromtimestamp(lock_stat.st_mtime, timezone.utc) + timedelta(minutes=options.ignore_locks) > datetime.now(timezone.utc)) else "w"
             logger.debug("SFTP open on %s", lock_file_name)
             self._lockfile = self.sftp.open(lock_file_name, mode)
+            _test_state_folder(str(self.remote_write_path / STATE_DIR_NAME))
         except IOError as e:
             e.add_note(f"Can't acquire lock on remote folder (can't create {e}), if this is after an interrupted sync operation, delete the lock file manually or use the --ignore-locks option")
             if lock_stat is None and options.ignore_locks is None:
@@ -786,11 +809,17 @@ class Remote:
             self.sftp.remove(lock_file_name)
 
     def __enter__(self):
-        self._lock()
+        self._lock_and_initialize()
         return self
 
     def __exit__(self, exc_type, exc_value, exc_tb):
         self._unlock()
+
+@dataclass
+class State:
+    local: dict
+    remote: dict
+    remote_timezone_mtime: datetime
 
 class Storage:
     class Unpickler(pickle.Unpickler):
@@ -804,22 +833,23 @@ class Storage:
         self.state_path = Path(local_path) / STATE_DIR_NAME
         self.state_filename = str(self.state_path / server_name)
 
-    def save_psync_info(self, local_data: dict, remote_data: dict):
+    def save_state(self, state: State):
         logger.debug("Saving state")
         self.state_path.mkdir(parents=True, exist_ok=True)
         old_state_file_name = self.state_filename + OLD_FILE_SUFFIX
         new_state_file_name = self.state_filename + NEW_FILE_SUFFIX
         with open(new_state_file_name, "wb") as out_file:
-            pickle.dump((local_data, remote_data), out_file)
+            pickle.dump(state, out_file)
         if previous_exists := os.path.exists(self.state_filename):
             os.rename(self.state_filename, old_state_file_name)
         os.rename(new_state_file_name, self.state_filename)
         if previous_exists:
             os.remove(old_state_file_name)
 
-    def load_psync_info(self):
+    def load_state(self):
         logger.debug("Loading state")
         self.state_path.mkdir(parents=True, exist_ok=True)
+
         # recovery
         old_state_file_name = self.state_filename + OLD_FILE_SUFFIX
         new_state_file_name = self.state_filename + NEW_FILE_SUFFIX
@@ -837,9 +867,15 @@ class Storage:
 
         if os.path.exists(self.state_filename) and os.path.isfile(self.state_filename):
             with open(self.state_filename, "rb") as in_file:
-                return Storage.Unpickler(in_file).load()
+                unpickler = Storage.Unpickler(in_file)
+                state = unpickler.load()
+                if isinstance(state, tuple):
+                    # old format
+                    state = cast(tuple[dict, dict], state)
+                    return State(state[0], state[1], None)
+                return cast(State, state)
         else:
-            return (dict(), dict())
+            return State(dict(), dict(), None)
 
 class Sync:
     def __init__(self, local: Local, remote: Remote, storage: Storage):
@@ -895,24 +931,52 @@ class Sync:
         pass
 
     def collect(self):
+        def _equal_entries(current, previous, time_shift: timedelta):
+            if isinstance(current, FileInfo) and isinstance(previous, FileInfo):
+                return current.is_equal_previous(previous, time_shift)
+            else:
+                return current == previous
         def _new_entries(current: dict, previous: dict):
             return {k for k in current.keys() if k not in previous}
         def _deleted_entries(current: dict, previous: dict):
             return {k for k in previous.keys() if k not in current}
-        def _changed_entries(current: dict, previous: dict):
-            return {k for k in current.keys() if k in previous and current[k] != previous[k]}
-        def _unchanged_entries(current: dict, previous: dict):
-            return {k for k in current.keys() if k in previous and current[k] == previous[k]}
+        def _changed_entries(current: dict, previous: dict, time_shift: timedelta = None):
+            return {k for k in current.keys() if k in previous and not _equal_entries(current[k], previous[k], time_shift)}
+        def _unchanged_entries(current: dict, previous: dict, time_shift: timedelta = None):
+            return {k for k in current.keys() if k in previous and _equal_entries(current[k], previous[k], time_shift)}
 
         logger.info_header("----------- Scanning")
 
-        self.local_previous, self.remote_previous = self.storage.load_psync_info()
+        previous_state = self.storage.load_state()
+        self.local_previous = previous_state.local
+        self.remote_previous = previous_state.remote
+        self.remote_timezone_mtime_previous = previous_state.remote_timezone_mtime
+
         self.local_current = dict(sorted(self.local.scandir(self.is_local_destination)))
         if self.local.has_unsupported_hardlink:
             raise RuntimeError("Hardlinks can't be used on local side as destination without enabling --overwrite-destination option")
         if self.local.has_unsupported_folder_symlink:
             raise RuntimeError("Folder symlinks or junctions can't be used on local side as destination without enabling --folder-symlink-as-destination option")
         self.remote_current = dict(sorted(self.remote.scandir()))
+        self.remote_timezone_mtime_current = self.remote.timezone_offset_measurement_mtime
+
+        # FAT (FAT32, exFAT) stores mtime in local time, if the DST changes or the phone moves to another timezone, all mtime will change.
+        # But using the timezone offset of the phone (eg. date +"%z") won't work, because the DST +1 offset is not added but subtracted from the timezone,
+        # ie. UTC+1 in DST is UTC+2, but this is equivalnet with UTC+0 and not UTC+2 timezone offset, total chaos.
+        # That's why a never changing file is used to determine the real offset.
+        remote_time_shift = None
+        if self.remote_timezone_mtime_previous is not None:
+            remote_timezone_mtime_change = self.remote_timezone_mtime_current - self.remote_timezone_mtime_previous
+            remote_timezone_mtime_change_minutes = remote_timezone_mtime_change.total_seconds() / 60
+            if (remote_timezone_mtime_change_minutes % 15
+                    or remote_timezone_mtime_change_minutes > (12+14)*60
+                    or remote_timezone_mtime_change_minutes < -(12+14)*60):
+                logger.warning("Remote timezone offset change %s minutes is not divisible by 15 minutes or larger than 26 hours (valid timezone range is -12:00 to +14:00), offset change is ignored",
+                    remote_timezone_mtime_change_minutes)
+            elif remote_timezone_mtime_change_minutes:
+                logger.debug("Remote timezone offset change %s minutes is detected, any modification time change that is identical with this is ignored",
+                    int(remote_timezone_mtime_change_minutes))
+                remote_time_shift = remote_timezone_mtime_change
 
         self.local_new = _new_entries(self.local_current, self.local_previous)
         self.local_deleted = _deleted_entries(self.local_current, self.local_previous)
@@ -921,8 +985,8 @@ class Sync:
 
         self.remote_new = _new_entries(self.remote_current, self.remote_previous)
         self.remote_deleted = _deleted_entries(self.remote_current, self.remote_previous)
-        self.remote_changed = _changed_entries(self.remote_current, self.remote_previous)
-        self.remote_unchanged = _unchanged_entries(self.remote_current, self.remote_previous)
+        self.remote_changed = _changed_entries(self.remote_current, self.remote_previous, remote_time_shift)
+        self.remote_unchanged = _unchanged_entries(self.remote_current, self.remote_previous, remote_time_shift)
 
         self.delete_local = set()
         self.delete_remote = set()
@@ -1044,14 +1108,14 @@ class Sync:
             logger.info_header("----------- Everything is up to date!")
 
         if not options.dry:
-            self.storage.save_psync_info(self.local_current, self.remote_current)
+            self.storage.save_state(State(self.local_current, self.remote_current, self.remote_timezone_mtime_current))
         else:
             if self.identical:
                 # even if we didn't changed anything in the file-system, we can remember the fact, that some files are checked by hash/content, and they are de facto identical
                 for relative_path in self.identical:
                     self.local_previous[relative_path] = self.local_current[relative_path]
                     self.remote_previous[relative_path] = self.remote_current[relative_path]
-                self.storage.save_psync_info(self.local_previous, self.remote_previous)
+                self.storage.save_state(State(self.local_previous, self.remote_previous, self.remote_timezone_mtime_previous))
 
     def run(self):
         self.collect()

@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Handle timezone offset changes on remote FAT filesystems
+
 ## 0.6.0
 
 - Remove server-name validation for prim-ftpd and --dont-validate-server-name option
