@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from fnmatch import fnmatch
 from itertools import chain
 from pathlib import Path, PurePath, PurePosixPath
-from typing import Dict, cast
+from typing import Self, cast
 
 from paramiko import SSHClient, SFTPClient, MissingHostKeyPolicy, RejectPolicy
 from paramiko.ssh_exception import NoValidConnectionsError, BadHostKeyException, SSHException
@@ -39,7 +39,7 @@ OLD_FILE_SUFFIX = '.prim-sync.old' # new, tmp and old suffixes have to be the sa
 class LevelFormatter(logging.Formatter):
     logging.Formatter.default_msec_format = logging.Formatter.default_msec_format.replace(',', '.') if logging.Formatter.default_msec_format else None
 
-    def __init__(self, fmts: Dict[int, str], fmt: str, **kwargs):
+    def __init__(self, fmts: dict[int, str], fmt: str, **kwargs):
         super().__init__()
         self.formatters = dict({level: logging.Formatter(fmt, **kwargs) for level, fmt in fmts.items()})
         self.default_formatter = logging.Formatter(fmt, **kwargs)
