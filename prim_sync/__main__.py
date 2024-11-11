@@ -1,6 +1,4 @@
 
-from __future__ import annotations
-
 from abc import abstractmethod
 import argparse
 import hashlib
@@ -219,7 +217,7 @@ class FileInfo:
         self.mtime = mtime
     def __repr__(self):
         return f'({self.size}, {self.mtime})'
-    def is_equal_previous(self, previous: FileInfo, time_shift: timedelta | None):
+    def is_equal_previous(self, previous: Self, time_shift: timedelta | None):
         if time_shift is not None:
             return self.size == previous.size and self.mtime == previous.mtime + time_shift
         else:
