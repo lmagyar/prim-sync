@@ -793,7 +793,7 @@ class Remote:
 class State:
     local: dict
     remote: dict
-    remote_timezone_mtime: datetime
+    remote_timezone_mtime: datetime | None
 
 class Storage:
     class Unpickler(pickle.Unpickler):
@@ -899,7 +899,7 @@ class Sync:
         pass
 
     def collect(self):
-        def _equal_entries(current, previous, time_shift: timedelta):
+        def _equal_entries(current, previous, time_shift: timedelta | None):
             if isinstance(current, FileInfo) and isinstance(previous, FileInfo):
                 return current.is_equal_previous(previous, time_shift)
             else:
@@ -908,9 +908,9 @@ class Sync:
             return {k for k in current.keys() if k not in previous}
         def _deleted_entries(current: dict, previous: dict):
             return {k for k in previous.keys() if k not in current}
-        def _changed_entries(current: dict, previous: dict, time_shift: timedelta = None):
+        def _changed_entries(current: dict, previous: dict, time_shift: timedelta | None = None):
             return {k for k in current.keys() if k in previous and not _equal_entries(current[k], previous[k], time_shift)}
-        def _unchanged_entries(current: dict, previous: dict, time_shift: timedelta = None):
+        def _unchanged_entries(current: dict, previous: dict, time_shift: timedelta | None = None):
             return {k for k in current.keys() if k in previous and _equal_entries(current[k], previous[k], time_shift)}
 
         logger.info_header("----------- Scanning")
