@@ -45,7 +45,7 @@ You need to install:
   **Install from [F-Droid](https://f-droid.org/app/org.primftpd) (not from Google Play) (required minimum version is 7.3)**
 
 - Python 3.12+, pip and venv on your laptop - see: https://www.python.org/downloads/ or
-  <details><summary>Unix</summary>
+  <details><summary>Ubuntu</summary>
 
   ```
   sudo apt update
@@ -61,7 +61,7 @@ You need to install:
   </details>
 
 - pipx - see: https://pipx.pypa.io/stable/installation/#installing-pipx or
-  <details><summary>Unix</summary>
+  <details><summary>Ubuntu</summary>
 
   ```
   sudo apt install pipx
@@ -127,22 +127,29 @@ Either use the built-in zeroconf (DNS-SD) functionality in Primitive FTPd (see b
 
 ### SSH keys
 
-You need to generate an SSH key pair.
-<details><summary>Unix</summary>
+You need to generate an SSH key pair:
 
-```
-sudo apt install openssh-client
-mkdir ~/.ssh
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_sftp -N ""
-```
+<details><summary>Ubuntu</summary>
+
+- Execute:
+  ```
+  sudo apt install openssh-client
+  mkdir ~/.ssh
+  ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_sftp -N ""
+  ```
+
+  **Note:** See below later, how to protect the private SSH key with passphrase.
 </details>
 <details><summary>Windows</summary>
 
-Go to _Settings / System / Optional features / Add an optional feature_ and add "OpenSSH Client"
-```
-mkdir %USERPROFILE%\.ssh
-ssh-keygen -t ed25519 -f %USERPROFILE%\.ssh\id_ed25519_sftp -N ""
-```
+- Go to _Settings / System / Optional features / Add an optional feature_ and add "OpenSSH Client"
+- Execute:
+  ```
+  mkdir %USERPROFILE%\.ssh
+  ssh-keygen -t ed25519 -f %USERPROFILE%\.ssh\id_ed25519_sftp -N ""
+  ```
+
+  **Note:** See below later, how to protect the private SSH key with passphrase.
 </details>
 
 Then install it in Primitive FTPd:
@@ -156,7 +163,7 @@ Then add your phone to the known_hosts file if your favorite SFTP client hasn't 
 - Use ssh to access the Primitive FTPd, use username/password to authenticate.
 
   **Note:** Even if you plan to access Primitive FTPd through zeroconf (DNS-SD), use it's hostname or IP to connect to it at this step.
-  <details><summary>Unix</summary>
+  <details><summary>Ubuntu</summary>
 
   ```
   ssh -oUserKnownHostsFile=~/.ssh/known_hosts -oPort=2222 sftp@your.phone.host.name
@@ -222,7 +229,7 @@ Notes:
 
 ### Some example
 
-<details><summary>Unix</summary>
+<details><summary>Ubuntu</summary>
 
 ```
 prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
