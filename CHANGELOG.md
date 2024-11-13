@@ -2,7 +2,7 @@
 
 ## vNext
 
-- Handle timezone offset changes on remote FAT filesystems
+- Handle timezone offset and DST changes on remote FAT filesystems
 - Drop reading the old state storage format
 - Do not mention my forked prim-ftpd, PR-s got merged in the original repo
 - Remove --valid-chars option

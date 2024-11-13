@@ -24,7 +24,7 @@ See my other project, https://github.com/lmagyar/prim-batch, for batch execution
 - Connect through zeroconf (DNS-SD)
 - Handle FAT timezone and DST offset changes (FAT32 or exFAT SD card)
 
-#### Notes on following local symlinks
+### Notes on following local symlinks
 
 - File symlinks just work
 - File hardlinks are OK for unidirectional outward sync, but have to use --overwrite-destination option in case of bidirectional or unidirectional inward sync
