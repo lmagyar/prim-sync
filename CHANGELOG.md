@@ -7,6 +7,7 @@
 - Do not mention my forked prim-ftpd, PR-s got merged in the original repo
 - Remove --valid-chars option
 - Add documentation about using ssh-agent for passphrases
+- Update dependencies
 
 ## 0.6.0
 
