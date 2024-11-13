@@ -201,6 +201,57 @@ If you plan to access Primitive FTPd through zeroconf (DNS-SD):
 - Close and restart the whole app
 - Start the server
 
+### Optionally protecting the private SSH key with passphrase
+
+We can protect the private SSH key generated above with a passphrase and use the ssh-agent to store the unprotected key in memory and help the SSH client in prim-sync to authenticate with Primitive FTPd.
+
+<details><summary>Ubuntu</summary>
+
+- Protect the already generated key with a passphrase:
+
+  ```
+  ssh-keygen -p -f ~/.ssh/id_ed25519_sftp
+  ```
+
+- Install ssh-agent as a systemd service:
+
+  [How to start and use ssh-agent as systemd service?](https://unix.stackexchange.com/a/390631/548885)
+
+  **Note:** Identities that you've added ***will not be*** available after reboot.
+
+- Useful commands:
+
+  ```
+  ssh-add ~/.ssh/id_ed25519_sftp     # Adds private key identities to the agent
+  ssh-add -L                         # Lists public key parameters of all identities currently represented by the agent
+  ssh-add -d ~/.ssh/id_ed25519_sftp  # Removes private key identities from the agent
+  ```
+</details>
+<details><summary>Windows</summary>
+
+- Protect the already generated key with a passphrase:
+
+  ```
+  ssh-keygen -p -f %USERPROFILE%\.ssh\id_ed25519_sftp
+  ```
+
+- Start ssh-agent (OpenSSH Authentication Agent) automatically as a service (use an administrative PowerShell terminal):
+
+  ```
+  Get-Service ssh-agent | Set-Service -StartupType Automatic -PassThru | Start-Service
+  ```
+
+  **Note:** Identities that you've added ***will be*** available even after reboot.
+
+- Useful commands:
+
+  ```
+  ssh-add %USERPROFILE%\.ssh\id_ed25519_sftp     # Adds private key identities to the agent
+  ssh-add -L                                     # Lists public key parameters of all identities currently represented by the agent
+  ssh-add -d %USERPROFILE%\.ssh\id_ed25519_sftp  # Removes private key identities from the agent
+  ```
+</details>
+
 ## Usage
 
 Create a backup of your files!!! Really!!! If you use symlinks, this is only question of time when will you delete something unintendedly!!!
