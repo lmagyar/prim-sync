@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.7.0
 
 - Handle timezone offset and DST changes on remote FAT filesystems
 - Drop reading the old state storage format
