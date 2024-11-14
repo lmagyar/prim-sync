@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+- Handle timezone offset and DST changes on remote FAT filesystems
+- Drop reading the old state storage format
+- Do not mention my forked prim-ftpd, PR-s got merged in the original repo
+- Remove --valid-chars option
+- Add documentation about using ssh-agent for passphrases
+- Update dependencies
+
 ## 0.6.0
 
 - Remove server-name validation for prim-ftpd and --dont-validate-server-name option

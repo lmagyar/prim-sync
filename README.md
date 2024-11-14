@@ -1,13 +1,7 @@
 
-> [!WARNING]
-> ***This repository currently works much better with my modified version of the Primitive FTPd Android SFTP server!***
-> - ***install my fork from https://github.com/lmagyar/prim-ftpd - and use all the new features and bugfixes***
-> - ***install the original version from https://github.com/wolpi/prim-ftpd - and disable hashing (-H option), enable file rename (-v option), and be patient with the extreme slow SD card access (SAF)***
-> - ***or wait until the new features got merged into the original version, for the PR's statuses see https://github.com/wolpi/prim-ftpd/pulls/lmagyar***
-
 # Primitive Sync
 
-Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the [Primitive FTPd Android SFTP server](https://github.com/wolpi/prim-ftpd).
+Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the [Primitive FTPd Android SFTP server](https://github.com/wolpi/prim-ftpd) (required minimum version is 7.3).
 
 Why another sync solution? Because none of the professional solutions can write SD cards and follow local symlinks, or are extremely slow or full of bugs (Syncthing, Resilio Sync, rsync, osync, rclone, Unison). I gave up and wrote it.
 
@@ -20,13 +14,14 @@ See my other project, https://github.com/lmagyar/prim-batch, for batch execution
 ## Features
 
 - Follow local symlinks
-- Hash files for fast comparison ***( !!! currently requires the forked Primitive FTPd !!! )***
-- Write SD card (with Primitive FTPd and Storage Access Framework) ***( !!! fast operation currently requires the forked Primitive FTPd !!! )***
+- Hash files for fast comparison
+- Write SD card (with Primitive FTPd and Storage Access Framework)
 - Dual access in case of SD card (reading plain-old file-system for fast scan and download, and writing with the slower Storage Access Framework)
 - Failsafe, restartable operation (costs some time, renames on SD card are slow)
-- Connect to zeroconf (DNS-SD) servers
+- Connect through zeroconf (DNS-SD)
+- Handle FAT timezone and DST offset changes (FAT32 or exFAT SD card)
 
-#### Notes on following local symlinks
+### Notes on following local symlinks
 
 - File symlinks just work
 - File hardlinks are OK for unidirectional outward sync, but have to use --overwrite-destination option in case of bidirectional or unidirectional inward sync
@@ -42,12 +37,12 @@ See my other project, https://github.com/lmagyar/prim-batch, for batch execution
 ## Installation
 
 You need to install:
-- Primitive FTPd on your phone
-  - My forked version - see: https://github.com/lmagyar/prim-ftpd **download from [Releases](https://github.com/lmagyar/prim-ftpd/releases)**
-  - Original version - see: https://github.com/wolpi/prim-ftpd **install from [F-Droid](https://f-droid.org/app/org.primftpd) (not from Google Play)**
+- Primitive FTPd on your phone - see: https://github.com/wolpi/prim-ftpd
+
+  **Install from [F-Droid](https://f-droid.org/app/org.primftpd) (not from Google Play) (required minimum version is 7.3)**
 
 - Python 3.12+, pip and venv on your laptop - see: https://www.python.org/downloads/ or
-  <details><summary>Unix</summary>
+  <details><summary>Ubuntu</summary>
 
   ```
   sudo apt update
@@ -63,7 +58,7 @@ You need to install:
   </details>
 
 - pipx - see: https://pipx.pypa.io/stable/installation/#installing-pipx or
-  <details><summary>Unix</summary>
+  <details><summary>Ubuntu</summary>
 
   ```
   sudo apt install pipx
@@ -129,22 +124,29 @@ Either use the built-in zeroconf (DNS-SD) functionality in Primitive FTPd (see b
 
 ### SSH keys
 
-You need to generate an SSH key pair.
-<details><summary>Unix</summary>
+You need to generate an SSH key pair:
 
-```
-sudo apt install openssh-client
-mkdir ~/.ssh
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_sftp -N ""
-```
+<details><summary>Ubuntu</summary>
+
+- Execute:
+  ```
+  sudo apt install openssh-client
+  mkdir ~/.ssh
+  ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_sftp -N ""
+  ```
+
+  **Note:** See below later, how to protect the private SSH key with passphrase.
 </details>
 <details><summary>Windows</summary>
 
-Go to _Settings / System / Optional features / Add an optional feature_ and add "OpenSSH Client"
-```
-mkdir %USERPROFILE%\.ssh
-ssh-keygen -t ed25519 -f %USERPROFILE%\.ssh\id_ed25519_sftp -N ""
-```
+- Go to _Settings / System / Optional features / Add an optional feature_ and add "OpenSSH Client"
+- Execute:
+  ```
+  mkdir %USERPROFILE%\.ssh
+  ssh-keygen -t ed25519 -f %USERPROFILE%\.ssh\id_ed25519_sftp -N ""
+  ```
+
+  **Note:** See below later, how to protect the private SSH key with passphrase.
 </details>
 
 Then install it in Primitive FTPd:
@@ -158,7 +160,7 @@ Then add your phone to the known_hosts file if your favorite SFTP client hasn't 
 - Use ssh to access the Primitive FTPd, use username/password to authenticate.
 
   **Note:** Even if you plan to access Primitive FTPd through zeroconf (DNS-SD), use it's hostname or IP to connect to it at this step.
-  <details><summary>Unix</summary>
+  <details><summary>Ubuntu</summary>
 
   ```
   ssh -oUserKnownHostsFile=~/.ssh/known_hosts -oPort=2222 sftp@your.phone.host.name
@@ -196,11 +198,62 @@ If you plan to access Primitive FTPd through zeroconf (DNS-SD):
 - Close and restart the whole app
 - Start the server
 
+### Optionally protecting the private SSH key with passphrase
+
+We can protect the private SSH key generated above with a passphrase and use the ssh-agent to store the unprotected key in memory and help the SSH client in prim-sync to authenticate with Primitive FTPd.
+
+<details><summary>Ubuntu</summary>
+
+- Protect the already generated key with a passphrase:
+
+  ```
+  ssh-keygen -p -f ~/.ssh/id_ed25519_sftp
+  ```
+
+- Install ssh-agent as a systemd service:
+
+  [How to start and use ssh-agent as systemd service?](https://unix.stackexchange.com/a/390631/548885)
+
+  **Note:** Identities that you've added ***will not be*** available after reboot.
+
+- Useful commands:
+
+  ```
+  ssh-add ~/.ssh/id_ed25519_sftp     # Adds private key identities to the agent
+  ssh-add -L                         # Lists public key parameters of all identities currently represented by the agent
+  ssh-add -d ~/.ssh/id_ed25519_sftp  # Removes private key identities from the agent
+  ```
+</details>
+<details><summary>Windows</summary>
+
+- Protect the already generated key with a passphrase:
+
+  ```
+  ssh-keygen -p -f %USERPROFILE%\.ssh\id_ed25519_sftp
+  ```
+
+- Start ssh-agent (OpenSSH Authentication Agent) automatically as a service (use an administrative PowerShell terminal):
+
+  ```
+  Get-Service ssh-agent | Set-Service -StartupType Automatic -PassThru | Start-Service
+  ```
+
+  **Note:** Identities that you've added ***will be*** available even after reboot.
+
+- Useful commands:
+
+  ```
+  ssh-add %USERPROFILE%\.ssh\id_ed25519_sftp     # Adds private key identities to the agent
+  ssh-add -L                                     # Lists public key parameters of all identities currently represented by the agent
+  ssh-add -d %USERPROFILE%\.ssh\id_ed25519_sftp  # Removes private key identities from the agent
+  ```
+</details>
+
 ## Usage
 
 Create a backup of your files!!! Really!!! If you use symlinks, this is only question of time when will you delete something unintendedly!!!
 
-The first upload is better done over USB connection and manual copy, because copying files over Wi-Fi is much slower. The prim-sync script handles both this "external" upload and the changes in the future.
+The first upload is better done over USB connection and manual copy, because copying files over Wi-Fi is much slower.
 
 The first run will be longer than a regular run, because without prior knowledge, the prim-sync script handles all files on both sides as newly created and compares them or their hashes (hashing is much faster than downloading and comparing the content).
 
@@ -209,7 +262,6 @@ On regular runs the meaning of the log lines are:
 - Comparing, Hashing - Comparing the content or the hash of the files on the two sides.
 - <<< !!! >>> - Conflicting changes that are not resolved by any command line option, the details are in the next line.
 - RECOVER - The previous run failed (probably network/connection problem), and there are intermediate/leftover files that are deleted on the next (ie. this) run.
-- INVALID - Invalid characters in the filename are replaced because --valid-chars command line option is used.
 - HARDLNK - There are hardlinks on the destination side and --overwrite-destination command line option is not used.
 - SYMLINK - There are folder symlinks or junctions on the destination side and --folder-symlink-as-destination command line option is not used.
 - CHANGED - The destination file changed after the decision is made to update it and before it replaced by the new content, this conflict will be handled on the next run.
@@ -219,12 +271,13 @@ Notes:
 - Local file creation times (birthtime) are:
   - preserved on Windows but not on Unix when the default restartable operation is used
   - unchanged when --overwrite-destination option is used
+- Files in the remote folder and it's subfolders must be on the same filesystem (ie. do not mix FAT and non-FAT filesystems, the prim-sync script assumes the FAT timezone or DST offset changes are the same for all files under the remote folder)
 - You can brainwash (ie. delete the state under the .prim-sync folder) between two runs. After this, the script will behave, as if the next run is the first run (see "first run" above).
 - Never ever delete any files where the name ends with .prim-sync.new or .tmp or .old, the pure existence of these files are the "transaction state", if you delete any of these files, the recovery algorythm won't be able to figure out in which phase got the restartable operation interrupted. If you delete any of these files, you are on your own to figure out how to recover from the interruption.
 
 ### Some example
 
-<details><summary>Unix</summary>
+<details><summary>Ubuntu</summary>
 
 ```
 prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" "~/Mobile" "/fs/storage/XXXX-XXXX" "/saf" "Camera" "DCIM/Camera"
@@ -244,7 +297,7 @@ prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -
 ### Options
 
 ```
-usage: prim-sync [-h] [-a host port] [-ui | -uo] [-d] [-D] [-v [CHARS]] [-rs PATH] [--overwrite-destination] [--folder-symlink-as-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H]
+usage: prim-sync [-h] [-a host port] [-ui | -uo] [-d] [-D] [-rs PATH] [--overwrite-destination] [--folder-symlink-as-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H]
                  [-n | -o] [-cod | -doc] [-l [PATTERN ...]] [-r [PATTERN ...]] [-m [PATTERN ...]]
                  server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
 
@@ -266,8 +319,6 @@ options:
   -uo, --unidirectional-outward      unidirectional outward sync (default is bidirectional sync)
   -d, --dry                          no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up
   -D, --dry-on-conflict              in case of unresolved conflict(s), run dry
-  -v [CHARS], --valid-chars [CHARS]  replace [] chars in filenames with chars from CHARS (1 or 2 chars long, default is '()')
-                                     Note: this is required only for the original Primitive FTPd SAF SD card access, will be removed
   -rs PATH, --remote-state-prefix PATH
                                      stores remote state in a common .prim-sync folder under PATH instead of under the remote-folder argument (decreases SD card wear), eg. /fs/storage/emulated/0
                                      Note: currently only the .lock file is stored here
