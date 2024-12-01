@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Refactor exception logging
+
 ## 0.7.0
 
 - Handle timezone offset and DST changes on remote FAT filesystems
