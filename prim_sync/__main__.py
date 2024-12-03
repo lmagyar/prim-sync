@@ -46,7 +46,7 @@ class LevelFormatter(logging.Formatter):
         return self.formatters.get(record.levelno, self.default_formatter).format(record)
 
 class Logger(logging.Logger):
-    def __init__(self, name, level=logging.NOTSET):
+    def __init__(self, name, level = logging.NOTSET):
         super().__init__(name, level)
         self.exitcode = 0
 
