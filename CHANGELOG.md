@@ -3,6 +3,7 @@
 ## vNext
 
 - Refactor exception logging
+- Update dependencies
 
 ## 0.7.0
 

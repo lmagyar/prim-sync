@@ -20,7 +20,7 @@ packages = [{include = "prim_sync"}]
 python = "^3.12"
 paramiko = "^3.5.0"
 platformdirs = "^4.3.6"
-zeroconf = "^0.136.0"
+zeroconf = "^0.136.2"
 
 [tool.poetry.scripts]
 prim-sync = "prim_sync.__main__:run"
