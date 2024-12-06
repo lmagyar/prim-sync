@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.7.1
 
 - Refactor exception logging
 - Update dependencies
