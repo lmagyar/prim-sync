@@ -46,7 +46,7 @@ class LevelFormatter(logging.Formatter):
         return self.formatters.get(record.levelno, self.default_formatter).format(record)
 
 class Logger(logging.Logger):
-    def __init__(self, name, level=logging.NOTSET):
+    def __init__(self, name, level = logging.NOTSET):
         super().__init__(name, level)
         self.exitcode = 0
 
@@ -82,6 +82,15 @@ class Logger(logging.Logger):
     def info_header(self, msg, *args, **kwargs):
         if not self.silent_headers:
             super().info(msg, *args, **kwargs)
+
+    def exception_or_error(self, e: Exception, args):
+        if not args or args.debug:
+            logger.exception(e)
+        else:
+            if hasattr(e, '__notes__'):
+                logger.error("%s: %s", LazyStr(repr, e), LazyStr(", ".join, e.__notes__))
+            else:
+                logger.error(LazyStr(repr, e))
 
     def error(self, msg, *args, **kwargs):
         self.exitcode = 1
@@ -1669,13 +1678,7 @@ def main():
                     sync.run()
 
     except Exception as e:
-        if not args or args.debug:
-            logger.exception(e)
-        else:
-            if hasattr(e, '__notes__'):
-                logger.error("%s: %s", LazyStr(repr, e), LazyStr(", ".join, e.__notes__))
-            else:
-                logger.error(LazyStr(repr, e))
+        logger.exception_or_error(e, args)
 
     return logger.exitcode
 

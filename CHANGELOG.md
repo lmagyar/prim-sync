@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+- Refactor exception logging
+- Update dependencies
+
 ## 0.7.0
 
 - Handle timezone offset and DST changes on remote FAT filesystems
