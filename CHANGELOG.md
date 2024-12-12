@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Refactor caching
+
 ## 0.7.1
 
 - Refactor exception logging

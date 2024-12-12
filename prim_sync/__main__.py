@@ -1460,8 +1460,8 @@ class UnidirectionalOutwardSync(Sync):
 class Cache:
     PRIM_SYNC_APP_NAME = 'prim-sync'
 
-    def __init__(self):
-        self.cache_path = Path(user_cache_dir(Cache.PRIM_SYNC_APP_NAME, False))
+    def __init__(self, app_name: str):
+        self.cache_path = Path(user_cache_dir(app_name, False))
 
     def set(self, key: str, value: str):
         self.cache_path.mkdir(parents=True, exist_ok=True)
@@ -1631,7 +1631,7 @@ def main():
         remote_write_path = str(remote_write_prefix / remote_folder)
 
         with Zeroconf() as zeroconf:
-            service_cache = ServiceCache(Cache())
+            service_cache = ServiceCache(Cache(Cache.PRIM_SYNC_APP_NAME))
             service_resolver = SftpServiceResolver(zeroconf)
             with SSHClient() as ssh:
                 ssh.load_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
