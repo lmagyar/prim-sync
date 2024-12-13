@@ -2,7 +2,7 @@
 
 ## vNext
 
-- Refactor caching
+- Refactor caching, logging
 
 ## 0.7.1
 

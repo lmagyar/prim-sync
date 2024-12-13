@@ -113,7 +113,10 @@ class LazyStr:
         self.result = None
     def __str__(self):
         if self.result is None:
-            self.result = str(self.func(*self.args, **self.kwargs))
+            if callable(self.func):
+                self.result = str(self.func(*self.args, **self.kwargs))
+            else:
+                self.result = str(self.func)
         return self.result
 
 logger = Logger(Path(sys.argv[0]).name)
