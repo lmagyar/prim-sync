@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.2
+
+- Refactor caching, logging
+
 ## 0.7.1
 
 - Refactor exception logging
