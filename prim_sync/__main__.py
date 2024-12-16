@@ -1661,7 +1661,6 @@ def main():
                                 return
                             except (TimeoutError, socket.gaierror, ConnectionRefusedError, NoValidConnectionsError, BadHostKeyException) as e:
                                 logger.debug(LazyStr(repr, e))
-                                pass
                         host, port = _resolve(args.server_name, resolve_timeout)
                         _connect(host, port, connect_timeout)
                         service_cache.set(args.server_name, host, port)
