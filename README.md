@@ -217,9 +217,9 @@ We can protect the private SSH key generated above with a passphrase and use the
 
   [How to start and use ssh-agent as systemd service?](https://unix.stackexchange.com/a/390631/548885)
 
-  **Note:** Identities that you've added ***will not be*** available after reboot.
-
 - Useful commands:
+
+  **Note:** Identities that you've added ***will not be*** available after reboot.
 
   ```
   ssh-add ~/.ssh/id_ed25519_sftp     # Adds private key identities to the agent
@@ -241,9 +241,9 @@ We can protect the private SSH key generated above with a passphrase and use the
   Get-Service ssh-agent | Set-Service -StartupType Automatic -PassThru | Start-Service
   ```
 
-  **Note:** Identities that you've added ***will be*** available even after reboot.
-
 - Useful commands:
+
+  **Note:** Identities that you've added ***will be*** available even after reboot.
 
   ```
   ssh-add %USERPROFILE%\.ssh\id_ed25519_sftp     # Adds private key identities to the agent
