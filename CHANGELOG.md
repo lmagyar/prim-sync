@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.7.3
 
 - Update help and readme
 
