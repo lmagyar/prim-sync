@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.3
+
+- Update help and readme
+
 ## 0.7.2
 
 - Refactor caching, logging
