@@ -308,7 +308,7 @@ Bidirectional and unidirectional sync over SFTP. Multiplatform Python script opt
 
 positional arguments:
   server-name                        unique name for the server (if zeroconf is used, then the Servername configuration option from Primitive FTPd, otherwise see the --address option also)
-  keyfile                            key filename located under your .ssh folder
+  keyfile                            private SSH key filename located under your .ssh folder
   local-prefix                       local path to the parent of the folder to be synchronized
   remote-read-prefix                 read-only remote path to the parent of the folder to be synchronized, eg. /fs/storage/XXXX-XXXX or /rosaf
   remote-write-prefix                read-write remote path to the parent of the folder to be synchronized, eg. /saf (you can use * if this is the same as the read-only remote path above)

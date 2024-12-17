@@ -1539,7 +1539,7 @@ def main():
             formatter_class=WideHelpFormatter)
 
         parser.add_argument('server_name', metavar='server-name', help="unique name for the server (if zeroconf is used, then the Servername configuration option from Primitive FTPd, otherwise see the --address option also)")
-        parser.add_argument('keyfile', help="key filename located under your .ssh folder")
+        parser.add_argument('keyfile', help="private SSH key filename located under your .ssh folder")
         parser.add_argument('local_prefix', metavar='local-prefix', help="local path to the parent of the folder to be synchronized")
         parser.add_argument('remote_read_prefix', metavar='remote-read-prefix', help="read-only remote path to the parent of the folder to be synchronized, eg. /fs/storage/XXXX-XXXX or /rosaf")
         parser.add_argument('remote_write_prefix', metavar='remote-write-prefix', help="read-write remote path to the parent of the folder to be synchronized, eg. /saf (you can use * if this is the same as the read-only remote path above)")

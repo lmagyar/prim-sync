@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Update help and readme
+
 ## 0.7.2
 
 - Refactor caching, logging
