@@ -862,7 +862,7 @@ class Sync:
         self.remote = remote
         self.storage = storage
 
-    def _is_identical(self, relative_path: str):
+    def _is_identical(self, relative_path: str, use_compare_for_content_comparison: bool = True):
         def _compare_or_hash_files():
             def _compare_files():
                 logger.info("Comparing   %s/%s", self.local.local_folder, relative_path)
@@ -891,7 +891,7 @@ class Sync:
                 logger.info("Hashing     %s/%s", self.local.local_folder, relative_path)
                 # TODO Do it parallel
                 return _hash_local_file() == _hash_remote_file()
-            if (_hash_files() if options.use_hash_for_content_comparison else _compare_files()):
+            if (_hash_files() if options.use_hash_for_content_comparison else use_compare_for_content_comparison and _compare_files()):
                 self.identical.add(relative_path)
                 return True
             return False
@@ -1182,14 +1182,16 @@ class BidirectionalSync(Sync):
 
         for p in self.remote_changed:
             if p in self.local_unchanged:
-                self.download.add(p)
+                if not self._is_identical(p, use_compare_for_content_comparison=False):
+                    self.download.add(p)
         for p in self.remote_current:
             if p not in self.local_current and p not in self.local_deleted:
                 self.download.add(p)
 
         for p in self.local_changed:
             if p in self.remote_unchanged:
-                self.upload.add(p)
+                if not self._is_identical(p, use_compare_for_content_comparison=False):
+                    self.upload.add(p)
         for p in self.local_current:
             if p not in self.remote_current and p not in self.remote_deleted:
                 self.upload.add(p)

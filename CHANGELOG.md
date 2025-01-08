@@ -2,6 +2,7 @@
 
 ## vNext
 
+- Hash if size equals and only timestamp is changed on one side
 - Add folder name before relative path in logs
 
 ## 0.7.3
