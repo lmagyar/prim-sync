@@ -1105,9 +1105,9 @@ class Sync:
 #
 #   L\R  |   x   |   -   |   o   |   +   |   ?   |
 # -------|-------|-------|-------|-------|-------|
-#    x   |   x   |  --   |  <<   |  <C>  |   >>  |
+#    x   |   x   |  --   |  <H   |  <C>  |   >>  |
 #    -   |   --  |   x   |  <!>  |  <!>  |   x   |
-#    o   |   >>  |  <!>  |  <C>  |  <C>  |   >>  |
+#    o   |   H>  |  <!>  |  <C>  |  <C>  |   >>  |
 #    +   |  <C>  |  <!>  |  <C>  |  <C>  |   >>  |
 #    ?   |  <<   |   x   |  <<   |  <<   |#######|
 #
@@ -1124,7 +1124,9 @@ class Sync:
 # --  delete local
 #  -- delete remote
 # <<  download
+# <H  download only if size or hash differs
 #  >> upload
+#  H> upload only if size or hash differs
 # <C> compare (content or hash) to determine whether we have a conflict
 # <!> conflict
 
