@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.8.2
 
 - Fix hashing/comapring log message priority
 
