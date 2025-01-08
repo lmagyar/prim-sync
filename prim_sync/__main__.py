@@ -865,7 +865,7 @@ class Sync:
     def _is_identical(self, relative_path: str, use_compare_for_content_comparison: bool = True):
         def _compare_or_hash_files():
             def _compare_files():
-                logger.info("Comparing   %s/%s", self.local.local_folder, relative_path)
+                logger.info_scanning("Comparing   %s/%s", self.local.local_folder, relative_path)
                 local_file = self.local.open(relative_path)
                 remote_file = self.remote.open(relative_path)
                 identical = True
@@ -888,7 +888,7 @@ class Sync:
                 def _hash_remote_file():
                     remote_file = self.remote.open(relative_path)
                     return remote_file.check('sha256', 0, 0, 0)
-                logger.info("Hashing     %s/%s", self.local.local_folder, relative_path)
+                logger.info_scanning("Hashing     %s/%s", self.local.local_folder, relative_path)
                 # TODO Do it parallel
                 return _hash_local_file() == _hash_remote_file()
             if (_hash_files() if options.use_hash_for_content_comparison else use_compare_for_content_comparison and _compare_files()):

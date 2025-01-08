@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Fix hashing/comapring log message priority
+
 ## 0.8.1
 
 - Fix hashing on timestamp change for unidir sync
