@@ -1570,7 +1570,7 @@ def main():
         comparison_group = parser.add_argument_group('comparison')
         comparison_group.add_argument('-M', '--dont-use-mtime-for-comparison', dest="use_mtime_for_comparison", help="beyond size, modification time or content must be equal, if both are disabled, only size is compared", default=True, action='store_false')
         comparison_group.add_argument('-C', '--dont-use-content-for-comparison', dest="use_content_for_comparison", help="beyond size, modification time or content must be equal, if both are disabled, only size is compared", default=True, action='store_false')
-        comparison_group.add_argument('-H', '--dont-use-hash-for-content-comparison', dest="use_hash_for_content_comparison", help="not all sftp servers support hashing, but downloading content for comparison is mush slower than hashing", default=True, action='store_false')
+        comparison_group.add_argument('-H', '--dont-use-hash-for-content-comparison', dest="use_hash_for_content_comparison", help="not all sftp servers support hashing, but downloading content for comparison is much slower than hashing", default=True, action='store_false')
 
         bidir_conflict_resolution_group = parser.add_argument_group('bidirectional conflict resolution')
         bidir_conflict_resolution_newer_older_group = bidir_conflict_resolution_group.add_mutually_exclusive_group()
