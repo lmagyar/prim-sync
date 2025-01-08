@@ -284,7 +284,8 @@ class LocalFileInfo(FileInfo):
 #   x            x       x  RuntimeError
 
 class Local:
-    def __init__(self, local_path: str):
+    def __init__(self, local_folder: str, local_path: str):
+        self.local_folder = PurePosixPath(local_folder)
         self.local_path = PurePath(local_path)
         self._lockfile = None
         self._has_unsupported_hardlink = None
@@ -1004,7 +1005,7 @@ class Sync:
 
         for relative_path in chain(sorted({p for p in self.delete_local if not p.endswith('/')}, key=lambda p: (p.count('/'), p)),  # first delete files
                 sorted({p for p in self.delete_local if p.endswith('/')}, key=lambda p: (-p.count('/'), p))):                       # then folders, starting deep
-            logger.info("<<< DEL     %s", relative_path)
+            logger.info("<<< DEL     %s/%s", self.local.local_folder, relative_path)
             if not options.dry:
                 if self.local.remove(relative_path, self.local_current[relative_path]):
                     del self.local_current[relative_path]
@@ -1013,7 +1014,7 @@ class Sync:
 
         for relative_path in chain(sorted({p for p in self.delete_remote if not p.endswith('/')}, key=lambda p: (p.count('/'), p)), # first delete files
                 sorted({p for p in self.delete_remote if p.endswith('/')}, key=lambda p: (-p.count('/'), p))):                      # then folders, starting deep
-            logger.info("    DEL >>> %s", relative_path)
+            logger.info("    DEL >>> %s/%s", self.local.local_folder, relative_path)
             if not options.dry:
                 if self.remote.remove(relative_path, self.remote_current[relative_path]):
                     del self.remote_current[relative_path]
@@ -1023,13 +1024,13 @@ class Sync:
         for relative_path in chain(sorted({p for p in self.download if p.endswith('/')}, key=lambda p: (p.count('/'), p)),          # first create folders
                 sorted({p for p in self.download if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                        # then download files
             if relative_path.endswith('/'):
-                logger.info("<<<<<<<     %s", relative_path)
+                logger.info("<<<<<<<     %s/%s", self.local.local_folder, relative_path)
                 if not options.dry:
                     self.local.mkdir(relative_path)
                     self.local_current[relative_path] = None
             else:
                 remote_fileinfo = cast(FileInfo, self.remote_current[relative_path])
-                logger.info("<<<<<<<     %s, size: %s, time: %s", relative_path, _filesize_fmt(remote_fileinfo.size), remote_fileinfo.mtime)
+                logger.info("<<<<<<<     %s/%s, size: %s, time: %s", self.local.local_folder, relative_path, _filesize_fmt(remote_fileinfo.size), remote_fileinfo.mtime)
                 if not options.dry:
                     if new_local_fileinfo := self.local.download(relative_path, self.remote.open, self.remote.stat, self.local_current.get(relative_path), remote_fileinfo):
                         self.local_current[relative_path] = new_local_fileinfo
@@ -1039,13 +1040,13 @@ class Sync:
         for relative_path in chain(sorted({p for p in self.upload if p.endswith('/')}, key=lambda p: (p.count('/'), p)),            # first create folders
                 sorted({p for p in self.upload if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                          # then upload files
             if relative_path.endswith('/'):
-                logger.info("    >>>>>>> %s", relative_path)
+                logger.info("    >>>>>>> %s/%s", self.local.local_folder, relative_path)
                 if not options.dry:
                     self.remote.mkdir(relative_path)
                     self.remote_current[relative_path] = None
             else:
                 local_fileinfo = cast(FileInfo, self.local_current[relative_path])
-                logger.info("    >>>>>>> %s, size: %s, time: %s", relative_path, _filesize_fmt(local_fileinfo.size), local_fileinfo.mtime)
+                logger.info("    >>>>>>> %s/%s, size: %s, time: %s", self.local.local_folder, relative_path, _filesize_fmt(local_fileinfo.size), local_fileinfo.mtime)
                 if not options.dry:
                     if new_remote_fileinfo := self.remote.upload(self.local.open, self.local.stat, relative_path, local_fileinfo, self.remote_current.get(relative_path)):
                         self.remote_current[relative_path] = new_remote_fileinfo
@@ -1077,7 +1078,7 @@ class Sync:
                     elif fileinfo:
                         extended_reason += f", size: {_filesize_fmt(fileinfo.size)} ({format(fileinfo.size, ',d').replace(',',' ')}), time: {fileinfo.mtime}"
                 return extended_reason
-            logger.warning("<<< !!! >>> %s", relative_path)
+            logger.warning("<<< !!! >>> %s/%s", self.local.local_folder, relative_path)
             logger.warning(LazyStr(_extended_reason))
             _forget_changes(self.local_current, self.local_previous, relative_path)
             _forget_changes(self.remote_current, self.remote_previous, relative_path)
@@ -1667,7 +1668,7 @@ def main():
                 _connect_ssh(10, 30)
                 with (
                     ssh.open_sftp() as sftp,
-                    Local(local_path) as local,
+                    Local(local_folder, local_path) as local,
                     Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote
                 ):
                     storage = Storage(local_path, args.server_name)

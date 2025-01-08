@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Add folder name before relative path in logs
+
 ## 0.7.3
 
 - Update help and readme
