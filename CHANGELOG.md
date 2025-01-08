@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.8.1
 
 - Fix hashing on timestamp change for unidir sync
 
