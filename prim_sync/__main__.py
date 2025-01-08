@@ -313,7 +313,7 @@ class Local:
                     break
                 oldtmpnew_entry = oldtmpnew_entries[0] # do it one-by-one (there shouldn't be more) and reread the real timestamps from the os
                 entry_name = oldtmpnew_entry[:-len(OLD_FILE_SUFFIX)]
-                logger.info("<<< RECOVER %s", str(path / entry_name))
+                logger.info("<<< RECOVER %s/%s", self.local_folder, str(path / entry_name))
                 old_entry_name = entry_name + OLD_FILE_SUFFIX
                 tmp_entry_name = entry_name + TMP_FILE_SUFFIX
                 new_entry_name = entry_name + NEW_FILE_SUFFIX
@@ -339,7 +339,7 @@ class Local:
                 if entry.is_dir(follow_symlinks=True):
                     if is_destination and not options.folder_symlink_as_destination:
                         if entry.is_symlink() or entry.is_junction():
-                            logger.warning("<<< SYMLINK %s", relative_name)
+                            logger.warning("<<< SYMLINK %s/%s", self.local_folder, relative_name)
                             self._has_unsupported_folder_symlink = True
                     yield relative_name + '/', None
                     yield from _scandir(relative_path)
@@ -347,7 +347,7 @@ class Local:
                     if is_destination and not options.overwrite_destination:
                         stat = entry.stat(follow_symlinks=False)
                         if stat.st_nlink > 1:
-                            logger.warning("<<< HARDLNK %s", relative_name)
+                            logger.warning("<<< HARDLNK %s/%s", self.local_folder, relative_name)
                             self._has_unsupported_hardlink = True
                     stat = entry.stat(follow_symlinks=True)
                     yield relative_name, LocalFileInfo(size=stat.st_size, mtime=datetime.fromtimestamp(stat.st_mtime, timezone.utc),
@@ -553,7 +553,7 @@ class Remote:
                     break
                 oldtmpnew_entry = oldtmpnew_entries[0] # do it one-by-one (there shouldn't be more) and reread the real timestamps from the os
                 entry_name = oldtmpnew_entry[:-len(OLD_FILE_SUFFIX)]
-                logger.info("RECOVER >>> %s", str(path / entry_name))
+                logger.info("RECOVER >>> %s/%s", self.local_folder, str(path / entry_name))
                 old_entry_name = entry_name + OLD_FILE_SUFFIX
                 tmp_entry_name = entry_name + TMP_FILE_SUFFIX
                 new_entry_name = entry_name + NEW_FILE_SUFFIX
@@ -865,7 +865,7 @@ class Sync:
     def _is_identical(self, relative_path: str):
         def _compare_or_hash_files():
             def _compare_files():
-                logger.info("Comparing   %s", relative_path)
+                logger.info("Comparing   %s/%s", self.local.local_folder, relative_path)
                 local_file = self.local.open(relative_path)
                 remote_file = self.remote.open(relative_path)
                 identical = True
@@ -888,7 +888,7 @@ class Sync:
                 def _hash_remote_file():
                     remote_file = self.remote.open(relative_path)
                     return remote_file.check('sha256', 0, 0, 0)
-                logger.info("Hashing     %s", relative_path)
+                logger.info("Hashing     %s/%s", self.local.local_folder, relative_path)
                 # TODO Do it parallel
                 return _hash_local_file() == _hash_remote_file()
             if (_hash_files() if options.use_hash_for_content_comparison else _compare_files()):
