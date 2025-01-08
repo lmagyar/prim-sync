@@ -340,7 +340,7 @@ comparison:
   -C, --dont-use-content-for-comparison
                                      beyond size, modification time or content must be equal, if both are disabled, only size is compared
   -H, --dont-use-hash-for-content-comparison
-                                     not all sftp servers support hashing, but downloading content for comparison is mush slower than hashing
+                                     not all sftp servers support hashing, but downloading content for comparison is much slower than hashing
 
 bidirectional conflict resolution:
   -n, --newer-wins                   in case of conflict, newer file wins
