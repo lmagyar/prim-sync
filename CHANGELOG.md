@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Fix hashing on timestamp change for unidir sync
+
 ## 0.8.0
 
 - Hash if size equals and only timestamp is changed on one side

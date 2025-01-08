@@ -1243,7 +1243,7 @@ class BidirectionalSync(Sync):
 #
 #   L\R  |   x   |   -   |   o   |   +   |   ?   |
 # -------|-------|-------|-------|-------|-------|
-#    x   |   x   |  --   |  <<   |  <C   |  -!   |
+#    x   |   x   |  --   |  <H   |  <C   |  -!   |
 #    -   |  <!   |   x   |  <!   |  <!   |   x   |
 #    o   |  <!   |  -!   |  <C   |  <C   |  -!   |
 #    +   |  <C   |  -!   |  <C   |  <C   |  -!   |
@@ -1261,6 +1261,7 @@ class BidirectionalSync(Sync):
 #  x  do nothing
 # --  delete local
 # <<  download
+# <H  download only if size or hash differs
 # <C  compare (content or hash) to determine whether we have a conflict to download
 # -!  conflict to delete local
 # <!  conflict to download
@@ -1293,7 +1294,8 @@ class UnidirectionalInwardSync(Sync):
 
         for p in self.remote_changed:
             if p in self.local_unchanged:
-                self.download.add(p)
+                if not self._is_identical(p, use_compare_for_content_comparison=False):
+                    self.download.add(p)
         for p in self.remote_current:
             if p not in self.local_current and p not in self.local_deleted:
                 self.download.add(p)
@@ -1357,7 +1359,7 @@ class UnidirectionalInwardSync(Sync):
 # -------|-------|-------|-------|-------|-------|
 #    x   |   x   |   !>  |   !>  |   C>  |   >>  |
 #    -   |   --  |   x   |   !-  |   !-  |   x   |
-#    o   |   >>  |   !>  |   C>  |   C>  |   >>  |
+#    o   |   H>  |   !>  |   C>  |   C>  |   >>  |
 #    +   |   C>  |   !>  |   C>  |   C>  |   >>  |
 #    ?   |   !-  |   x   |   !-  |   !-  |#######|
 #
@@ -1373,6 +1375,7 @@ class UnidirectionalInwardSync(Sync):
 #  x  do nothing
 #  -- delete remote
 #  >> upload
+#  H> upload only if size or hash differs
 #  C> compare (content or hash) to determine whether we have a conflict to upload
 #  !- conflict to delete remote
 #  !> conflict to upload
@@ -1405,7 +1408,8 @@ class UnidirectionalOutwardSync(Sync):
 
         for p in self.local_changed:
             if p in self.remote_unchanged:
-                self.upload.add(p)
+                if not self._is_identical(p, use_compare_for_content_comparison=False):
+                    self.upload.add(p)
         for p in self.local_current:
             if p not in self.remote_current and p not in self.remote_deleted:
                 self.upload.add(p)
