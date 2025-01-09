@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.8.3
 
 - Fix folder name path separator in logs
 
