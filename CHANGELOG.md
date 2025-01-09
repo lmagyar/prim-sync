@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.4
+
+- Rerelease
+
 ## 0.8.3
 
 - Fix folder name path separator in logs
