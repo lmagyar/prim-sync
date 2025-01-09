@@ -285,7 +285,7 @@ class LocalFileInfo(FileInfo):
 
 class Local:
     def __init__(self, local_folder: str, local_path: str):
-        self.local_folder = PurePosixPath(local_folder)
+        self.local_folder = PurePath(local_folder).as_posix()
         self.local_path = PurePath(local_path)
         self._lockfile = None
         self._has_unsupported_hardlink = None
@@ -530,7 +530,7 @@ class Local:
 
 class Remote:
     def __init__(self, local_folder: str, sftp: SFTPClient, remote_read_path: str, remote_write_path: str):
-        self.local_folder = PurePosixPath(local_folder)
+        self.local_folder = PurePath(local_folder).as_posix()
         self.sftp = sftp
         self.remote_read_path = PurePosixPath(remote_read_path)
         self.remote_write_path = PurePosixPath(remote_write_path)
