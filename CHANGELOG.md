@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.3
+
+- Fix folder name path separator in logs
+
 ## 0.8.2
 
 - Fix hashing/comapring log message priority
