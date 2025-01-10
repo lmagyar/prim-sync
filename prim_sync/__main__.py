@@ -83,8 +83,8 @@ class Logger(logging.Logger):
         if not self.silent_headers:
             super().info(msg, *args, **kwargs)
 
-    def exception_or_error(self, e: Exception, args):
-        if not args or args.debug:
+    def exception_or_error(self, e: Exception):
+        if self.level == logging.NOTSET or self.level == logging.DEBUG:
             logger.exception(e)
         else:
             if hasattr(e, '__notes__'):
@@ -1689,7 +1689,7 @@ def main():
                     sync.run()
 
     except Exception as e:
-        logger.exception_or_error(e, args)
+        logger.exception_or_error(e)
 
     return logger.exitcode
 

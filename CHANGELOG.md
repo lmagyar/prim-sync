@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.5
+
+- Refactor exception logging arguments
+
 ## 0.8.4
 
 - Rerelease
