@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Refactor exception logging arguments
+
 ## 0.8.4
 
 - Rerelease
