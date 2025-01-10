@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.8.5
 
 - Refactor exception logging arguments
 
