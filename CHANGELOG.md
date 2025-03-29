@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Extend error message on broken symlinks
+
 ## 0.8.5
 
 - Refactor exception logging arguments

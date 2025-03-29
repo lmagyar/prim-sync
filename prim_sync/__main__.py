@@ -349,7 +349,12 @@ class Local:
                         if stat.st_nlink > 1:
                             logger.warning("<<< HARDLNK %s/%s", self.local_folder, relative_name)
                             self._has_unsupported_hardlink = True
-                    stat = entry.stat(follow_symlinks=True)
+                    try:
+                        stat = entry.stat(follow_symlinks=True)
+                    except FileNotFoundError as e:
+                        if entry.is_symlink():
+                            e.add_note(f"Symlink {str(self.local_path / relative_path)} -> {str(Path(self.local_path / relative_path).resolve(strict=False))} is broken, points to a nonexistent file")
+                        raise
                     yield relative_name, LocalFileInfo(size=stat.st_size, mtime=datetime.fromtimestamp(stat.st_mtime, timezone.utc),
                         btime=datetime.fromtimestamp(stat.st_birthtime if SETFILETIME_SUPPORTED else 0, timezone.utc),
                         symlink_target=str(Path(self.local_path / relative_path).resolve(strict=True)) if entry.is_symlink() else None)
