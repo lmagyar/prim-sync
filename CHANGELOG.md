@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.8.6
 
 - Extend error message on broken symlinks
 
