@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0
+
+- Add --copy-to-local and --copy-to-remote options
+
 ## 0.8.6
 
 - Extend error message on broken symlinks

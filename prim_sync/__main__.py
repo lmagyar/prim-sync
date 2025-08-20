@@ -31,6 +31,7 @@ TIMEZONE_OFFSET_MEASUREMENT_FILE_NAME = '.timezone-offset-measurement'
 NEW_FILE_SUFFIX = '.prim-sync.new' # new, tmp and old suffixes have to be the same length
 TMP_FILE_SUFFIX = '.prim-sync.tmp' # new, tmp and old suffixes have to be the same length
 OLD_FILE_SUFFIX = '.prim-sync.old' # new, tmp and old suffixes have to be the same length
+CONFLICT_FILE_SUFFIX = '.prim-sync.conflict'
 
 ########
 
@@ -136,6 +137,8 @@ class Options:
     local_wins_patterns: set[str] = field(default_factory=set)
     remote_wins: bool = False
     remote_wins_patterns: set[str] = field(default_factory=set)
+    copy_to_local: bool = False
+    copy_to_remote: bool = False
     mirror: bool = False
     mirror_patterns: set[str] = field(default_factory=set)
     remote_state_prefix: str | None = None
@@ -334,7 +337,7 @@ class Local:
             for entry in entries.values():
                 relative_path = path / entry.name
                 relative_name = str(relative_path)
-                if relative_name == STATE_DIR_NAME or relative_name == LOCK_FILE_NAME:
+                if relative_name == STATE_DIR_NAME or relative_name == LOCK_FILE_NAME or relative_name.endswith(CONFLICT_FILE_SUFFIX):
                     continue
                 if entry.is_dir(follow_symlinks=True):
                     if is_destination and not options.folder_symlink_as_destination:
@@ -413,7 +416,7 @@ class Local:
     def stat(self, relative_path: str):
         return os.stat(self.local_path / relative_path, follow_symlinks=True)
 
-    def download(self, relative_path: str, remote_open_fn, remote_stat_fn, local_fileinfo: LocalFileInfo | None, remote_fileinfo: FileInfo):
+    def download(self, relative_path: str, rename: bool, remote_open_fn, remote_stat_fn, local_fileinfo: LocalFileInfo | None, remote_fileinfo: FileInfo):
         def _copy(to_full_path: str):
             try:
                 with (
@@ -458,7 +461,7 @@ class Local:
             return False
         full_path = str(self.local_path / relative_path)
         # on any error any intermediate/leftover files will be cleaned up by the recovery during scan
-        if not options.overwrite_destination:
+        if not options.overwrite_destination and not rename:
             if local_fileinfo and local_fileinfo.symlink_target:
                 full_path = local_fileinfo.symlink_target
             old_full_path = full_path + OLD_FILE_SUFFIX
@@ -478,10 +481,14 @@ class Local:
                 else:
                     if _commitnew(new_full_path, full_path):
                         return new_fileinfo
-        else:
+        elif options.overwrite_destination:
             if _copy(full_path):
                 _utime(full_path)
                 return _fileinfo(full_path)
+        else: # rename
+            full_path += CONFLICT_FILE_SUFFIX
+            if _copy(full_path):
+                _utime(full_path)
         return None
 
     def mkdir(self, relative_path: str):
@@ -579,7 +586,7 @@ class Remote:
             for entry in entries.values():
                 relative_path = path / entry.filename
                 relative_name = str(relative_path)
-                if relative_name == STATE_DIR_NAME or relative_name == LOCK_FILE_NAME:
+                if relative_name == STATE_DIR_NAME or relative_name == LOCK_FILE_NAME or relative_name.endswith(CONFLICT_FILE_SUFFIX):
                     continue
                 if stat.S_ISDIR(entry.st_mode or 0):
                     yield relative_name + '/', None
@@ -640,7 +647,7 @@ class Remote:
     def stat(self, relative_path: str):
         return self.sftp.stat(str(self.remote_read_path / relative_path))
 
-    def upload(self, local_open_fn, local_stat_fn, relative_path: str, local_fileinfo: FileInfo, remote_fileinfo: FileInfo | None):
+    def upload(self, local_open_fn, local_stat_fn, relative_path: str, rename: bool, local_fileinfo: FileInfo, remote_fileinfo: FileInfo | None):
         def _copy(to_full_path: str):
             try:
                 with (
@@ -681,7 +688,7 @@ class Remote:
             return False
         full_path = str(self.remote_write_path / relative_path)
         # on any error any intermediate/leftover files will be cleaned up by the recovery during scan
-        if not options.overwrite_destination:
+        if not options.overwrite_destination and not rename:
             old_full_path = full_path + OLD_FILE_SUFFIX
             tmp_full_path = full_path + TMP_FILE_SUFFIX
             new_full_path = full_path + NEW_FILE_SUFFIX
@@ -696,10 +703,14 @@ class Remote:
                 else:
                     if _commitnew(new_full_path, full_path):
                         return new_fileinfo
-        else:
+        elif options.overwrite_destination:
             if _copy(full_path):
                 _utime(full_path)
                 return _fileinfo(full_path)
+        else: # rename
+            full_path += CONFLICT_FILE_SUFFIX
+            if _copy(full_path):
+                _utime(full_path)
         return None
 
     def mkdir(self, relative_path: str):
@@ -976,6 +987,8 @@ class Sync:
         self.delete_remote = set()
         self.download = set()
         self.upload = set()
+        self.download_with_rename = set()
+        self.upload_with_rename = set()
         self.identical = set()
         self.conflict = dict()
 
@@ -1005,7 +1018,7 @@ class Sync:
         if options.dry_on_conflict and self.conflict:
             options.dry = True
 
-        if options.dry and (self.delete_local or self.delete_remote or self.download or self.upload):
+        if options.dry and (self.delete_local or self.delete_remote or self.download or self.upload or self.download_with_rename or self.upload_with_rename):
             logger.info("!!!!!!!!!!! Running dry! No deletion, creation, upload or download will be executed!")
 
         for relative_path in chain(sorted({p for p in self.delete_local if not p.endswith('/')}, key=lambda p: (p.count('/'), p)),  # first delete files
@@ -1027,7 +1040,7 @@ class Sync:
                     logger.info("  CHANGED >   will be processed only on the next run")
 
         for relative_path in chain(sorted({p for p in self.download if p.endswith('/')}, key=lambda p: (p.count('/'), p)),          # first create folders
-                sorted({p for p in self.download if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                        # then download files
+                sorted({p for p in chain(self.download, self.download_with_rename) if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                        # then download files
             if relative_path.endswith('/'):
                 logger.info("<<<<<<<     %s/%s", self.local.local_folder, relative_path)
                 if not options.dry:
@@ -1035,15 +1048,19 @@ class Sync:
                     self.local_current[relative_path] = None
             else:
                 remote_fileinfo = cast(FileInfo, self.remote_current[relative_path])
-                logger.info("<<<<<<<     %s/%s, size: %s, time: %s", self.local.local_folder, relative_path, _filesize_fmt(remote_fileinfo.size), remote_fileinfo.mtime)
+                rename = relative_path in self.download_with_rename
+                logger.info("<<<<<<< %s %s/%s, size: %s, time: %s", "   " if not rename else "!!!", self.local.local_folder, relative_path, _filesize_fmt(remote_fileinfo.size), remote_fileinfo.mtime)
                 if not options.dry:
-                    if new_local_fileinfo := self.local.download(relative_path, self.remote.open, self.remote.stat, self.local_current.get(relative_path), remote_fileinfo):
-                        self.local_current[relative_path] = new_local_fileinfo
+                    if not rename:
+                        if new_local_fileinfo := self.local.download(relative_path, False, self.remote.open, self.remote.stat, self.local_current.get(relative_path), remote_fileinfo):
+                            self.local_current[relative_path] = new_local_fileinfo
+                        else:
+                            logger.info("< CHANGED >   will be processed only on the next run")
                     else:
-                        logger.info("< CHANGED >   will be processed only on the next run")
+                        self.local.download(relative_path, True, self.remote.open, self.remote.stat, self.local_current.get(relative_path), remote_fileinfo)
 
         for relative_path in chain(sorted({p for p in self.upload if p.endswith('/')}, key=lambda p: (p.count('/'), p)),            # first create folders
-                sorted({p for p in self.upload if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                          # then upload files
+                sorted({p for p in chain(self.upload, self.upload_with_rename) if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                          # then upload files
             if relative_path.endswith('/'):
                 logger.info("    >>>>>>> %s/%s", self.local.local_folder, relative_path)
                 if not options.dry:
@@ -1051,12 +1068,16 @@ class Sync:
                     self.remote_current[relative_path] = None
             else:
                 local_fileinfo = cast(FileInfo, self.local_current[relative_path])
-                logger.info("    >>>>>>> %s/%s, size: %s, time: %s", self.local.local_folder, relative_path, _filesize_fmt(local_fileinfo.size), local_fileinfo.mtime)
+                rename = relative_path in self.upload_with_rename
+                logger.info("%s >>>>>>> %s/%s, size: %s, time: %s", "   " if not rename else "!!!", self.local.local_folder, relative_path, _filesize_fmt(local_fileinfo.size), local_fileinfo.mtime)
                 if not options.dry:
-                    if new_remote_fileinfo := self.remote.upload(self.local.open, self.local.stat, relative_path, local_fileinfo, self.remote_current.get(relative_path)):
-                        self.remote_current[relative_path] = new_remote_fileinfo
+                    if not rename:
+                        if new_remote_fileinfo := self.remote.upload(self.local.open, self.local.stat, relative_path, False, local_fileinfo, self.remote_current.get(relative_path)):
+                            self.remote_current[relative_path] = new_remote_fileinfo
+                        else:
+                            logger.info("< CHANGED >   will be processed only on the next run")
                     else:
-                        logger.info("< CHANGED >   will be processed only on the next run")
+                        self.remote.upload(self.local.open, self.local.stat, relative_path, True, local_fileinfo, self.remote_current.get(relative_path))
 
         for relative_path, reason in sorted(self.conflict.items(), key=lambda p: (p.count('/'), p)):
             def _extended_reason():
@@ -1088,7 +1109,7 @@ class Sync:
             _forget_changes(self.local_current, self.local_previous, relative_path)
             _forget_changes(self.remote_current, self.remote_previous, relative_path)
 
-        if not self.delete_local and not self.delete_remote and not self.download and not self.upload and not self.conflict:
+        if not self.delete_local and not self.delete_remote and not self.download and not self.upload and not self.download_with_rename and not self.upload_with_rename and not self.conflict:
             logger.info_header("----------- Everything is up to date!")
 
         if not options.dry:
@@ -1147,16 +1168,23 @@ class BidirectionalSync(Sync):
                 self.upload.add(relative_path)
             else:
                 self.download.add(relative_path)
+            return True
         else:
             prefer_local = options.local_wins or options.local_wins_patterns and any(fnmatch(relative_path, p) for p in options.local_wins_patterns)
             prefer_remote = options.remote_wins or options.remote_wins_patterns and any(fnmatch(relative_path, p) for p in options.remote_wins_patterns)
             if prefer_local and not prefer_remote:
                 self.upload.add(relative_path)
+                return True
             elif not prefer_local and prefer_remote:
                 self.download.add(relative_path)
-            else:
-                return False
-        return True
+                return True
+        if options.copy_to_local or options.copy_to_remote:
+            if options.copy_to_local:
+                self.download_with_rename.add(relative_path)
+            if options.copy_to_remote:
+                self.upload_with_rename.add(relative_path)
+            return True
+        return False
 
     def _resolve_local_deleted(self, relative_path: str):
         if options.change_wins_over_deletion:
@@ -1596,6 +1624,8 @@ def main():
                                                       "if no PATTERN is specified, local always wins")
         bidir_conflict_resolution_group.add_argument('-r', '--remote-wins-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space\n"
                                                       "if no PATTERN is specified, remote always wins")
+        bidir_conflict_resolution_group.add_argument('-cl', '--copy-to-local', help="in case of conflict, copy remote file to local with .prim-sync.conflict added to file name", default=False, action='store_true')
+        bidir_conflict_resolution_group.add_argument('-cr', '--copy-to-remote', help="in case of conflict, copy local file to remote with .prim-sync.conflict added to file name", default=False, action='store_true')
 
         unidir_conflict_resolution_group = parser.add_argument_group('unidirectional conflict resolution')
         unidir_conflict_resolution_group.add_argument('-m', '--mirror-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space\n"
@@ -1627,6 +1657,8 @@ def main():
             local_wins_patterns=set(args.local_wins_patterns or []),
             remote_wins=(args.remote_wins_patterns is not None and len(args.remote_wins_patterns) == 0),
             remote_wins_patterns=set(args.remote_wins_patterns or []),
+            copy_to_local=args.copy_to_local,
+            copy_to_remote=args.copy_to_remote,
             mirror=(args.mirror_patterns is not None and len(args.mirror_patterns) == 0),
             mirror_patterns=set(args.mirror_patterns or []),
             remote_state_prefix=args.remote_state_prefix,

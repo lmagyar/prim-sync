@@ -260,6 +260,10 @@ The first run will be longer than a regular run, because without prior knowledge
 On regular runs the meaning of the log lines are:
 - Scanning - Name of the remote folder that is scanned (only remote is logged, remote is the bottleneck)
 - Comparing, Hashing - Comparing the content or the hash of the files on the two sides.
+- <<<<<<< - Download
+- <<<<<<< !!! - Download, but due to unresolved conflict, remote file is saved with different name locally
+- >>>>>>> - Upload
+- <<<<<<< !!! - Upload, but due to unresolved conflict, local file is saved with different name remotely
 - <<< !!! >>> - Conflicting changes that are not resolved by any command line option, the details are in the next line.
 - RECOVER - The previous run failed (probably network/connection problem), and there are intermediate/leftover files that are deleted on the next (ie. this) run.
 - HARDLNK - There are hardlinks on the destination side and --overwrite-destination command line option is not used.
@@ -298,7 +302,7 @@ prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -
 
 ```
 usage: prim-sync [-h] [-a host port] [-ui | -uo] [-d] [-D] [-rs PATH] [--overwrite-destination] [--folder-symlink-as-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H]
-                 [-n | -o] [-cod | -doc] [-l [PATTERN ...]] [-r [PATTERN ...]] [-m [PATTERN ...]]
+                 [-n | -o] [-cod | -doc] [-l [PATTERN ...]] [-r [PATTERN ...]] [-cl] [-cr] [-m [PATTERN ...]]
                  server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
 
 Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the Primitive FTPd Android SFTP server (https://github.com/wolpi/prim-ftpd), for more details see https://github.com/lmagyar/prim-sync
@@ -353,6 +357,8 @@ bidirectional conflict resolution:
   -r [PATTERN ...], --remote-wins-patterns [PATTERN ...]
                                      in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space
                                      if no PATTERN is specified, remote always wins
+  -cl, --copy-to-local               in case of conflict, copy remote file to local with .prim-sync.conflict added to file name
+  -cr, --copy-to-remote              in case of conflict, copy local file to remote with .prim-sync.conflict added to file name
 
 unidirectional conflict resolution:
   -m [PATTERN ...], --mirror-patterns [PATTERN ...]
