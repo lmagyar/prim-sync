@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.9.0
 
 - Add --copy-to-local and --copy-to-remote options
 
