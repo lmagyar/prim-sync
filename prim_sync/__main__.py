@@ -1039,8 +1039,8 @@ class Sync:
                 else:
                     logger.info("  CHANGED >   will be processed only on the next run")
 
-        for relative_path in chain(sorted({p for p in self.download if p.endswith('/')}, key=lambda p: (p.count('/'), p)),          # first create folders
-                sorted({p for p in chain(self.download, self.download_with_rename) if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                        # then download files
+        for relative_path in chain(sorted({p for p in self.download if p.endswith('/')}, key=lambda p: (p.count('/'), p)),                     # first create folders
+                sorted({p for p in chain(self.download, self.download_with_rename) if not p.endswith('/')}, key=lambda p: (p.count('/'), p))): # then download files
             if relative_path.endswith('/'):
                 logger.info("<<<<<<<     %s/%s", self.local.local_folder, relative_path)
                 if not options.dry:
@@ -1059,8 +1059,8 @@ class Sync:
                     else:
                         self.local.download(relative_path, True, self.remote.open, self.remote.stat, self.local_current.get(relative_path), remote_fileinfo)
 
-        for relative_path in chain(sorted({p for p in self.upload if p.endswith('/')}, key=lambda p: (p.count('/'), p)),            # first create folders
-                sorted({p for p in chain(self.upload, self.upload_with_rename) if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                          # then upload files
+        for relative_path in chain(sorted({p for p in self.upload if p.endswith('/')}, key=lambda p: (p.count('/'), p)),                   # first create folders
+                sorted({p for p in chain(self.upload, self.upload_with_rename) if not p.endswith('/')}, key=lambda p: (p.count('/'), p))): # then upload files
             if relative_path.endswith('/'):
                 logger.info("    >>>>>>> %s/%s", self.local.local_folder, relative_path)
                 if not options.dry:
