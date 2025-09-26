@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Fix "hash if size equals and only timestamp is changed on one side" for unidirectional sync
+
 ## 0.9.0
 
 - Add --copy-to-local and --copy-to-remote options
