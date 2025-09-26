@@ -263,7 +263,7 @@ On regular runs the meaning of the log lines are:
 - <<<<<<< - Download
 - <<<<<<< !!! - Download, but due to unresolved conflict, remote file is saved with different name locally
 - >>>>>>> - Upload
-- <<<<<<< !!! - Upload, but due to unresolved conflict, local file is saved with different name remotely
+- !!! >>>>>>> - Upload, but due to unresolved conflict, local file is saved with different name remotely
 - <<< !!! >>> - Conflicting changes that are not resolved by any command line option, the details are in the next line.
 - RECOVER - The previous run failed (probably network/connection problem), and there are intermediate/leftover files that are deleted on the next (ie. this) run.
 - HARDLNK - There are hardlinks on the destination side and --overwrite-destination command line option is not used.

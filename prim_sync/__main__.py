@@ -1039,8 +1039,8 @@ class Sync:
                 else:
                     logger.info("  CHANGED >   will be processed only on the next run")
 
-        for relative_path in chain(sorted({p for p in self.download if p.endswith('/')}, key=lambda p: (p.count('/'), p)),          # first create folders
-                sorted({p for p in chain(self.download, self.download_with_rename) if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                        # then download files
+        for relative_path in chain(sorted({p for p in self.download if p.endswith('/')}, key=lambda p: (p.count('/'), p)),                     # first create folders
+                sorted({p for p in chain(self.download, self.download_with_rename) if not p.endswith('/')}, key=lambda p: (p.count('/'), p))): # then download files
             if relative_path.endswith('/'):
                 logger.info("<<<<<<<     %s/%s", self.local.local_folder, relative_path)
                 if not options.dry:
@@ -1059,8 +1059,8 @@ class Sync:
                     else:
                         self.local.download(relative_path, True, self.remote.open, self.remote.stat, self.local_current.get(relative_path), remote_fileinfo)
 
-        for relative_path in chain(sorted({p for p in self.upload if p.endswith('/')}, key=lambda p: (p.count('/'), p)),            # first create folders
-                sorted({p for p in chain(self.upload, self.upload_with_rename) if not p.endswith('/')}, key=lambda p: (p.count('/'), p))):                          # then upload files
+        for relative_path in chain(sorted({p for p in self.upload if p.endswith('/')}, key=lambda p: (p.count('/'), p)),                   # first create folders
+                sorted({p for p in chain(self.upload, self.upload_with_rename) if not p.endswith('/')}, key=lambda p: (p.count('/'), p))): # then upload files
             if relative_path.endswith('/'):
                 logger.info("    >>>>>>> %s/%s", self.local.local_folder, relative_path)
                 if not options.dry:
@@ -1278,7 +1278,7 @@ class BidirectionalSync(Sync):
 # -------|-------|-------|-------|-------|-------|
 #    x   |   x   |  --   |  <H   |  <C   |  -!   |
 #    -   |  <!   |   x   |  <!   |  <!   |   x   |
-#    o   |  <!   |  -!   |  <C   |  <C   |  -!   |
+#    o   |  <!H  |  -!   |  <C   |  <C   |  -!   |
 #    +   |  <C   |  -!   |  <C   |  <C   |  -!   |
 #    ?   |  <<   |   x   |  <<   |  <<   |#######|
 #
@@ -1298,6 +1298,7 @@ class BidirectionalSync(Sync):
 # <C  compare (content or hash) to determine whether we have a conflict to download
 # -!  conflict to delete local
 # <!  conflict to download
+# <!H conflict to download only if size or hash differs
 
 class UnidirectionalInwardSync(Sync):
     @property
@@ -1358,7 +1359,7 @@ class UnidirectionalInwardSync(Sync):
                     self.conflict[p] = "is deleted locally but exists remotely"
         for p in self.local_changed:
             if p in self.remote_unchanged:
-                if not self._resolve_download(p):
+                if not self._is_identical(p, use_compare_for_content_comparison=False) and not self._resolve_download(p):
                     self.conflict[p] = "is changed locally but unchanged remotely"
 
         for p in self.remote_new:
@@ -1390,7 +1391,7 @@ class UnidirectionalInwardSync(Sync):
 #
 #   L\R  |   x   |   -   |   o   |   +   |   ?   |
 # -------|-------|-------|-------|-------|-------|
-#    x   |   x   |   !>  |   !>  |   C>  |   >>  |
+#    x   |   x   |   !>  |  H!>  |   C>  |   >>  |
 #    -   |   --  |   x   |   !-  |   !-  |   x   |
 #    o   |   H>  |   !>  |   C>  |   C>  |   >>  |
 #    +   |   C>  |   !>  |   C>  |   C>  |   >>  |
@@ -1412,6 +1413,7 @@ class UnidirectionalInwardSync(Sync):
 #  C> compare (content or hash) to determine whether we have a conflict to upload
 #  !- conflict to delete remote
 #  !> conflict to upload
+# H!> conflict to upload only if size or hash differs
 
 class UnidirectionalOutwardSync(Sync):
     @property
@@ -1472,7 +1474,7 @@ class UnidirectionalOutwardSync(Sync):
                     self.conflict[p] = "exists locally but is deleted remotely"
         for p in self.remote_changed:
             if p in self.local_unchanged:
-                if not self._resolve_upload(p):
+                if not self._is_identical(p, use_compare_for_content_comparison=False) and not self._resolve_upload(p):
                     self.conflict[p] = "is unchanged locally but changed remotely"
 
         for p in self.remote_new:
