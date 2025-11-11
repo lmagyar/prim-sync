@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Update dependencies and project file structure
+
 ## 0.9.1
 
 - Fix "hash if size equals and only timestamp is changed on one side" for unidirectional sync
