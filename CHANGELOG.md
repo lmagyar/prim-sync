@@ -2,6 +2,7 @@
 
 ## vNext
 
+- Skip special prim-sync folders and files in subfolders also
 - Scan in alphabetical order
 - Update dependencies and project file structure
 
