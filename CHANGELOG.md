@@ -2,6 +2,7 @@
 
 ## vNext
 
+- Scan in alphabetical order
 - Update dependencies and project file structure
 
 ## 0.9.1

@@ -334,7 +334,7 @@ class Local:
                     if new_entry_exists:
                         os.rename(self.local_path / path / new_entry_name, self.local_path / path / entry_name)
                     os.remove(self.local_path / path / old_entry_name)
-            for entry in entries.values():
+            for entry in sorted(entries.values(), key=lambda e: e.name):
                 relative_path = path / entry.name
                 relative_name = str(relative_path)
                 if relative_name == STATE_DIR_NAME or relative_name == LOCK_FILE_NAME or relative_name.endswith(CONFLICT_FILE_SUFFIX):
@@ -583,7 +583,7 @@ class Remote:
                     if new_entry_exists:
                         self.sftp.rename(str(self.remote_write_path / path / new_entry_name), str(self.remote_write_path / path / entry_name))
                     self.sftp.remove(str(self.remote_write_path / path / old_entry_name))
-            for entry in entries.values():
+            for entry in sorted(entries.values(), key=lambda e: e.filename):
                 relative_path = path / entry.filename
                 relative_name = str(relative_path)
                 if relative_name == STATE_DIR_NAME or relative_name == LOCK_FILE_NAME or relative_name.endswith(CONFLICT_FILE_SUFFIX):
