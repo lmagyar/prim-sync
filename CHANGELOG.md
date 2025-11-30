@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.9.2
 
 - Skip special prim-sync folders and files in subfolders also
 - Scan in alphabetical order
