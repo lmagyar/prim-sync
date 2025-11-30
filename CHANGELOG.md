@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.2
+
+- Skip special prim-sync folders and files in subfolders also
+- Scan in alphabetical order
+- Update dependencies and project file structure
+
 ## 0.9.1
 
 - Fix "hash if size equals and only timestamp is changed on one side" for unidirectional sync

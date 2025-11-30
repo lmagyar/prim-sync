@@ -258,17 +258,17 @@ The first upload is better done over USB connection and manual copy, because cop
 The first run will be longer than a regular run, because without prior knowledge, the prim-sync script handles all files on both sides as newly created and compares them or their hashes (hashing is much faster than downloading and comparing the content).
 
 On regular runs the meaning of the log lines are:
-- Scanning - Name of the remote folder that is scanned (only remote is logged, remote is the bottleneck)
-- Comparing, Hashing - Comparing the content or the hash of the files on the two sides.
-- <<<<<<< - Download
-- <<<<<<< !!! - Download, but due to unresolved conflict, remote file is saved with different name locally
-- >>>>>>> - Upload
-- !!! >>>>>>> - Upload, but due to unresolved conflict, local file is saved with different name remotely
-- <<< !!! >>> - Conflicting changes that are not resolved by any command line option, the details are in the next line.
-- RECOVER - The previous run failed (probably network/connection problem), and there are intermediate/leftover files that are deleted on the next (ie. this) run.
-- HARDLNK - There are hardlinks on the destination side and --overwrite-destination command line option is not used.
-- SYMLINK - There are folder symlinks or junctions on the destination side and --folder-symlink-as-destination command line option is not used.
-- CHANGED - The destination file changed after the decision is made to update it and before it replaced by the new content, this conflict will be handled on the next run.
+- `Scanning` - Name of the remote folder that is scanned (only remote is logged, remote is the bottleneck)
+- `Comparing`, `Hashing` - Comparing the content or the hash of the files on the two sides.
+- `<<<<<<<    ` - Download
+- `<<<<<<< !!!` - Download, but due to unresolved conflict, remote file is saved with different name locally
+- `    >>>>>>>` - Upload
+- `!!! >>>>>>>` - Upload, but due to unresolved conflict, local file is saved with different name remotely
+- `<<< !!! >>>` - Conflicting changes that are not resolved by any command line option, the details are in the next line.
+- `<<< RECOVER`, `RECOVER >>>` - The previous run failed (probably network/connection problem), and there are intermediate/leftover files that are deleted on the next (ie. this) run.
+- `<<< HARDLNK` - There are hardlinks on the destination side and --overwrite-destination command line option is not used.
+- `<<< SYMLINK` - There are folder symlinks or junctions on the destination side and --folder-symlink-as-destination command line option is not used.
+- `< CHANGED >` - If the --overwrite-destination option is **not** used and the source or destination file is changed after the decision is made to sync them but before the destination is replaced by the new content, this conflict will be handled on the next run.
 
 Notes:
 - In the log lines the left side is the Local and the right side is the Remote
