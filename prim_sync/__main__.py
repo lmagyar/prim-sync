@@ -232,11 +232,14 @@ class FileInfo:
         self.mtime = mtime
     def __repr__(self):
         return f'({self.size}, {self.mtime})'
-    def is_equal_previous(self, previous: Self, time_shift: timedelta | None):
-        if time_shift is not None:
-            return self.size == previous.size and self.mtime == previous.mtime + time_shift
-        else:
-            return self.size == previous.size and self.mtime == previous.mtime
+    def __eq__(self, other):
+        if not isinstance(other, FileInfo):
+            return NotImplemented
+        return self.size == other.size and self.mtime == other.mtime
+    def __ne__(self, other):
+        if not isinstance(other, FileInfo):
+            return NotImplemented
+        return self.size != other.size or self.mtime != other.mtime
 
 class LocalFileInfo(FileInfo):
     def __init__(self, size: int, mtime: datetime, btime: datetime, symlink_target: str | None):
@@ -879,73 +882,76 @@ class Sync:
         self.storage = storage
 
     def _is_identical(self, relative_path: str, use_compare_for_content_comparison: bool = True):
-        def _compare_or_hash_files():
-            def _compare_files():
-                logger.info_scanning("Comparing   %s/%s", self.local.local_folder, relative_path)
-                local_file = self.local.open(relative_path)
-                remote_file = self.remote.open(relative_path)
-                identical = True
-                while True:
-                    local_buffer = local_file.read(1024 * 1024)
-                    remote_buffer = remote_file.read(1024 * 1024)
-                    if local_buffer != remote_buffer:
-                        identical = False
-                        break
-                    if not local_buffer:
-                        break
-                return identical
-            def _hash_files():
-                def _hash_local_file():
+        def __is_identical():
+            def _compare_or_hash_files():
+                def _compare_files():
+                    logger.info_scanning("Comparing   %s/%s", self.local.local_folder, relative_path)
                     local_file = self.local.open(relative_path)
-                    digest = hashlib.sha256()
-                    while buffer := local_file.read(65536):
-                        digest.update(buffer)
-                    return digest.digest()
-                def _hash_remote_file():
                     remote_file = self.remote.open(relative_path)
-                    return remote_file.check('sha256', 0, 0, 0)
-                logger.info_scanning("Hashing     %s/%s", self.local.local_folder, relative_path)
-                # TODO Do it parallel
-                return _hash_local_file() == _hash_remote_file()
-            if (_hash_files() if options.use_hash_for_content_comparison else use_compare_for_content_comparison and _compare_files()):
-                self.identical.add(relative_path)
+                    identical = True
+                    while True:
+                        local_buffer = local_file.read(1024 * 1024)
+                        remote_buffer = remote_file.read(1024 * 1024)
+                        if local_buffer != remote_buffer:
+                            identical = False
+                            break
+                        if not local_buffer:
+                            break
+                    return identical
+                def _hash_files():
+                    def _hash_local_file():
+                        local_file = self.local.open(relative_path)
+                        digest = hashlib.sha256()
+                        while buffer := local_file.read(65536):
+                            digest.update(buffer)
+                        return digest.digest()
+                    def _hash_remote_file():
+                        remote_file = self.remote.open(relative_path)
+                        return remote_file.check('sha256', 0, 0, 0)
+                    logger.info_scanning("Hashing     %s/%s", self.local.local_folder, relative_path)
+                    # TODO Do it parallel
+                    return _hash_local_file() == _hash_remote_file()
+                if options.use_hash_for_content_comparison:
+                    return _hash_files()
+                elif use_compare_for_content_comparison:
+                    return _compare_files()
+                else:
+                    return False
+            if relative_path.endswith('/'):
                 return True
-            return False
-        if relative_path.endswith('/'):
-            return True
-        local_fileinfo = cast(FileInfo, self.local_current[relative_path])
-        remote_fileinfo = cast(FileInfo, self.remote_current[relative_path])
-        return (local_fileinfo.size == remote_fileinfo.size
-            and ((options.use_mtime_for_comparison and local_fileinfo.mtime == remote_fileinfo.mtime)
-                or (options.use_content_for_comparison and _compare_or_hash_files())
-                or (not options.use_mtime_for_comparison and not options.use_content_for_comparison)))
+            local_fileinfo = cast(FileInfo, self.local_current[relative_path])
+            remote_fileinfo = cast(FileInfo, self.remote_current[relative_path])
+            return (local_fileinfo.size == remote_fileinfo.size
+                and ((options.use_mtime_for_comparison and local_fileinfo.mtime == remote_fileinfo.mtime)
+                    or (options.use_content_for_comparison and _compare_or_hash_files())
+                    or (not options.use_mtime_for_comparison and not options.use_content_for_comparison)))
+        if is_identical := __is_identical():
+            self.local_tracking[relative_path] = self.local_current[relative_path]
+            self.remote_tracking[relative_path] = self.remote_current[relative_path]
+        return is_identical
 
     @property
     @abstractmethod
     def is_local_destination(self) -> bool:
         pass
 
-    def collect(self):
-        def _equal_entries(current, previous, time_shift: timedelta | None):
-            if isinstance(current, FileInfo) and isinstance(previous, FileInfo):
-                return current.is_equal_previous(previous, time_shift)
-            else:
-                return current == previous
-        def _new_entries(current: dict, previous: dict):
-            return {k for k in current.keys() if k not in previous}
-        def _deleted_entries(current: dict, previous: dict):
-            return {k for k in previous.keys() if k not in current}
-        def _changed_entries(current: dict, previous: dict, time_shift: timedelta | None = None):
-            return {k for k in current.keys() if k in previous and not _equal_entries(current[k], previous[k], time_shift)}
-        def _unchanged_entries(current: dict, previous: dict, time_shift: timedelta | None = None):
-            return {k for k in current.keys() if k in previous and _equal_entries(current[k], previous[k], time_shift)}
-
-        logger.info_header("----------- Scanning")
-
+    def load(self):
         previous_state = self.storage.load_state()
         self.local_previous = previous_state.local
         self.remote_previous = previous_state.remote
         self.remote_timezone_mtime_previous = previous_state.remote_timezone_mtime
+
+    def collect(self):
+        def _new_entries(current: dict, previous: dict):
+            return {k for k in current.keys() if k not in previous}
+        def _deleted_entries(current: dict, previous: dict):
+            return {k for k in previous.keys() if k not in current}
+        def _changed_entries(current: dict, previous: dict):
+            return {k for k in current.keys() if k in previous and current[k] != previous[k]}
+        def _unchanged_entries(current: dict, previous: dict):
+            return {k for k in current.keys() if k in previous and current[k] == previous[k]}
+
+        logger.info_header("----------- Scanning")
 
         self.local_current = dict(self.local.scandir(self.is_local_destination))
         if self.local.has_unsupported_hardlink:
@@ -972,6 +978,10 @@ class Sync:
                 logger.debug("Remote timezone offset change %s minutes is detected, any modification time change that is identical with this is ignored",
                     int(remote_timezone_mtime_change_minutes))
                 remote_time_shift = remote_timezone_mtime_change
+        if remote_time_shift:
+            for fileinfo in self.remote_previous.values():
+                if fileinfo:
+                    fileinfo.mtime += remote_time_shift
 
         self.local_new = _new_entries(self.local_current, self.local_previous)
         self.local_deleted = _deleted_entries(self.local_current, self.local_previous)
@@ -980,8 +990,8 @@ class Sync:
 
         self.remote_new = _new_entries(self.remote_current, self.remote_previous)
         self.remote_deleted = _deleted_entries(self.remote_current, self.remote_previous)
-        self.remote_changed = _changed_entries(self.remote_current, self.remote_previous, remote_time_shift)
-        self.remote_unchanged = _unchanged_entries(self.remote_current, self.remote_previous, remote_time_shift)
+        self.remote_changed = _changed_entries(self.remote_current, self.remote_previous)
+        self.remote_unchanged = _unchanged_entries(self.remote_current, self.remote_previous)
 
         self.delete_local = set()
         self.delete_remote = set()
@@ -989,8 +999,11 @@ class Sync:
         self.upload = set()
         self.download_with_rename = set()
         self.upload_with_rename = set()
-        self.identical = set()
         self.conflict = dict()
+
+        self.local_tracking = dict(self.local_previous)
+        self.remote_tracking = dict(self.remote_previous)
+        self.remote_timezone_mtime_tracking = self.remote_timezone_mtime_current
 
     def compare(self):
         logger.info_header("----------- Analyzing")
@@ -1005,12 +1018,6 @@ class Sync:
                         return f"{num:.1f} {unit}{suffix}"
                 num /= 1024.0
             return f"{num:.1f} T{suffix}"
-        def _forget_changes(current: dict, previous: dict, relative_path: str):
-            previous_entry = previous.get(relative_path, None)
-            if previous_entry:
-                current[relative_path] = previous_entry
-            else:
-                current.pop(relative_path, None)
 
         logger.info_header("----------- Executing")
 
@@ -1026,7 +1033,8 @@ class Sync:
             logger.info("<<< DEL     %s/%s", self.local.local_folder, relative_path)
             if not options.dry:
                 if self.local.remove(relative_path, self.local_current[relative_path]):
-                    del self.local_current[relative_path]
+                    del self.local_tracking[relative_path]
+                    del self.remote_tracking[relative_path]
                 else:
                     logger.info("< CHANGED     will be processed only on the next run")
 
@@ -1035,7 +1043,8 @@ class Sync:
             logger.info("    DEL >>> %s/%s", self.local.local_folder, relative_path)
             if not options.dry:
                 if self.remote.remove(relative_path, self.remote_current[relative_path]):
-                    del self.remote_current[relative_path]
+                    del self.local_tracking[relative_path]
+                    del self.remote_tracking[relative_path]
                 else:
                     logger.info("  CHANGED >   will be processed only on the next run")
 
@@ -1045,7 +1054,8 @@ class Sync:
                 logger.info("<<<<<<<     %s/%s", self.local.local_folder, relative_path)
                 if not options.dry:
                     self.local.mkdir(relative_path)
-                    self.local_current[relative_path] = None
+                    self.local_tracking[relative_path] = None
+                    self.remote_tracking[relative_path] = None
             else:
                 remote_fileinfo = cast(FileInfo, self.remote_current[relative_path])
                 rename = relative_path in self.download_with_rename
@@ -1053,11 +1063,13 @@ class Sync:
                 if not options.dry:
                     if not rename:
                         if new_local_fileinfo := self.local.download(relative_path, False, self.remote.open, self.remote.stat, self.local_current.get(relative_path), remote_fileinfo):
-                            self.local_current[relative_path] = new_local_fileinfo
+                            self.local_tracking[relative_path] = new_local_fileinfo
+                            self.remote_tracking[relative_path] = remote_fileinfo
                         else:
                             logger.info("< CHANGED >   will be processed only on the next run")
                     else:
-                        self.local.download(relative_path, True, self.remote.open, self.remote.stat, self.local_current.get(relative_path), remote_fileinfo)
+                        self.local.download(relative_path, True, self.remote.open, self.remote.stat, None, remote_fileinfo)
+                        self.remote_tracking[relative_path] = remote_fileinfo
 
         for relative_path in chain(sorted({p for p in self.upload if p.endswith('/')}, key=lambda p: (p.count('/'), p)),                   # first create folders
                 sorted({p for p in chain(self.upload, self.upload_with_rename) if not p.endswith('/')}, key=lambda p: (p.count('/'), p))): # then upload files
@@ -1065,7 +1077,8 @@ class Sync:
                 logger.info("    >>>>>>> %s/%s", self.local.local_folder, relative_path)
                 if not options.dry:
                     self.remote.mkdir(relative_path)
-                    self.remote_current[relative_path] = None
+                    self.local_tracking[relative_path] = None
+                    self.remote_tracking[relative_path] = None
             else:
                 local_fileinfo = cast(FileInfo, self.local_current[relative_path])
                 rename = relative_path in self.upload_with_rename
@@ -1073,11 +1086,13 @@ class Sync:
                 if not options.dry:
                     if not rename:
                         if new_remote_fileinfo := self.remote.upload(self.local.open, self.local.stat, relative_path, False, local_fileinfo, self.remote_current.get(relative_path)):
-                            self.remote_current[relative_path] = new_remote_fileinfo
+                            self.local_tracking[relative_path] = local_fileinfo
+                            self.remote_tracking[relative_path] = new_remote_fileinfo
                         else:
                             logger.info("< CHANGED >   will be processed only on the next run")
                     else:
-                        self.remote.upload(self.local.open, self.local.stat, relative_path, True, local_fileinfo, self.remote_current.get(relative_path))
+                        self.remote.upload(self.local.open, self.local.stat, relative_path, True, local_fileinfo, None)
+                        self.local_tracking[relative_path] = local_fileinfo
 
         for relative_path, reason in sorted(self.conflict.items(), key=lambda p: (p.count('/'), p)):
             def _extended_reason():
@@ -1106,26 +1121,21 @@ class Sync:
                 return extended_reason
             logger.warning("<<< !!! >>> %s/%s", self.local.local_folder, relative_path)
             logger.warning(LazyStr(_extended_reason))
-            _forget_changes(self.local_current, self.local_previous, relative_path)
-            _forget_changes(self.remote_current, self.remote_previous, relative_path)
 
         if not self.delete_local and not self.delete_remote and not self.download and not self.upload and not self.download_with_rename and not self.upload_with_rename and not self.conflict:
             logger.info_header("----------- Everything is up to date!")
 
-        if not options.dry:
-            self.storage.save_state(State(self.local_current, self.remote_current, self.remote_timezone_mtime_current))
-        else:
-            if self.identical:
-                # even if we didn't changed anything in the file-system, we can remember the fact, that some files are checked by hash/content, and they are de facto identical
-                for relative_path in self.identical:
-                    self.local_previous[relative_path] = self.local_current[relative_path]
-                    self.remote_previous[relative_path] = self.remote_current[relative_path]
-                self.storage.save_state(State(self.local_previous, self.remote_previous, self.remote_timezone_mtime_previous))
+    def save(self):
+        self.storage.save_state(State(self.local_tracking, self.remote_tracking, self.remote_timezone_mtime_tracking))
 
     def run(self):
+        self.load()
         self.collect()
-        self.compare()
-        self.execute()
+        try:
+            self.compare()
+            self.execute()
+        finally:
+            self.save()
 
 # Bidirectional comparison
 #

@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Track changes during sync and save them on exception
+
 ## 0.9.2
 
 - Skip special prim-sync folders and files in subfolders also
