@@ -947,12 +947,12 @@ class Sync:
         self.remote_previous = previous_state.remote
         self.remote_timezone_mtime_previous = previous_state.remote_timezone_mtime
 
-        self.local_current = dict(sorted(self.local.scandir(self.is_local_destination)))
+        self.local_current = dict(self.local.scandir(self.is_local_destination))
         if self.local.has_unsupported_hardlink:
             raise RuntimeError("Hardlinks can't be used on local side as destination without enabling --overwrite-destination option")
         if self.local.has_unsupported_folder_symlink:
             raise RuntimeError("Folder symlinks or junctions can't be used on local side as destination without enabling --folder-symlink-as-destination option")
-        self.remote_current = dict(sorted(self.remote.scandir()))
+        self.remote_current = dict(self.remote.scandir())
         self.remote_timezone_mtime_current = self.remote.timezone_offset_measurement_mtime
 
         # FAT (FAT32, exFAT) stores mtime in local time, if the DST changes or the phone moves to another timezone, all mtime will change.
