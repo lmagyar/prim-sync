@@ -305,6 +305,8 @@ prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -
 
 ```
 usage: prim-sync [-h] [-a host port] [-ui | -uo] [-d] [-D] [-rs PATH] [--overwrite-destination] [--folder-symlink-as-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H]
+                 [-f PATTERN [PATTERN ...]] [-i PATTERN [PATTERN ...]] [-in PATTERN [PATTERN ...]]
+                 [-lf PATTERN [PATTERN ...]] [-li PATTERN [PATTERN ...]] [-lin PATTERN [PATTERN ...]] [-rf PATTERN [PATTERN ...]] [-ri PATTERN [PATTERN ...]] [-rin PATTERN [PATTERN ...]]
                  [-n | -o] [-cod | -doc] [-l [PATTERN ...]] [-r [PATTERN ...]] [-cl] [-cr] [-m [PATTERN ...]]
                  server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
 
@@ -321,13 +323,12 @@ positional arguments:
 
 options:
   -h, --help                         show this help message and exit
-  -a host port, --address host port  if zeroconf is not used, then the address of the server
+  -a, --address host port            if zeroconf is not used, then the address of the server
   -ui, --unidirectional-inward       unidirectional inward sync (default is bidirectional sync)
   -uo, --unidirectional-outward      unidirectional outward sync (default is bidirectional sync)
   -d, --dry                          no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up
   -D, --dry-on-conflict              in case of unresolved conflict(s), run dry
-  -rs PATH, --remote-state-prefix PATH
-                                     stores remote state in a common .prim-sync folder under PATH instead of under the remote-folder argument (decreases SD card wear), eg. /fs/storage/emulated/0
+  -rs, --remote-state-prefix PATH    stores remote state in a common .prim-sync folder under PATH instead of under the remote-folder argument (decreases SD card wear), eg. /fs/storage/emulated/0
                                      Note: currently only the .lock file is stored here
                                      Note: if you access the same server from multiple clients, you have to specify the same --remote-state-prefix option everywhere to prevent concurrent access
   --overwrite-destination            don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot when used with bidirectional sync
@@ -349,22 +350,45 @@ comparison:
   -H, --dont-use-hash-for-content-comparison
                                      not all sftp servers support hashing, but downloading content for comparison is much slower than hashing
 
+filtering:
+  Note: ignore patterns have higher priority than filter patterns
+  Note: ignore-not patterns have higher priority than ignore patterns
+
+  -f, --filter PATTERN [PATTERN ...]
+                                     only files matching this Unix shell PATTERN will be scanned, multiple values are allowed, separated by space
+  -i, --ignore PATTERN [PATTERN ...]
+                                     only files not matching this Unix shell PATTERN will be scanned, multiple values are allowed, separated by space
+  -in, --ignore-not PATTERN [PATTERN ...]
+                                     files matching this Unix shell PATTERN will not be ignored, multiple values are allowed, separated by space
+  -lf, --local-filter PATTERN [PATTERN ...]
+                                     only files matching this Unix shell PATTERN will be scanned locally, multiple values are allowed, separated by space
+  -li, --local-ignore PATTERN [PATTERN ...]
+                                     only files not matching this Unix shell PATTERN will be scanned locally, multiple values are allowed, separated by space
+  -lin, --local-ignore-not PATTERN [PATTERN ...]
+                                     files matching this Unix shell PATTERN will not be ignored locally, multiple values are allowed, separated by space
+  -rf, --remote-filter PATTERN [PATTERN ...]
+                                     only files matching this Unix shell PATTERN will be scanned remotely, multiple values are allowed, separated by space
+  -ri, --remote-ignore PATTERN [PATTERN ...]
+                                     only files not matching this Unix shell PATTERN will be scanned remotely, multiple values are allowed, separated by space
+  -rin, --remote-ignore-not PATTERN [PATTERN ...]
+                                     files matching this Unix shell PATTERN will not be ignored remotely, multiple values are allowed, separated by space
+
 bidirectional conflict resolution:
   -n, --newer-wins                   in case of conflict, newer file wins
   -o, --older-wins                   in case of conflict, older file wins
   -cod, --change-wins-over-deletion  in case of conflict, changed/new file wins over deleted file
   -doc, --deletion-wins-over-change  in case of conflict, deleted file wins over changed/new file
-  -l [PATTERN ...], --local-wins-patterns [PATTERN ...]
+  -l, --local-wins-patterns [PATTERN ...]
                                      in case of conflict, local files matching this Unix shell PATTERN win, multiple values are allowed, separated by space
                                      if no PATTERN is specified, local always wins
-  -r [PATTERN ...], --remote-wins-patterns [PATTERN ...]
+  -r, --remote-wins-patterns [PATTERN ...]
                                      in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space
                                      if no PATTERN is specified, remote always wins
   -cl, --copy-to-local               in case of conflict, copy remote file to local with .prim-sync.conflict added to file name
   -cr, --copy-to-remote              in case of conflict, copy local file to remote with .prim-sync.conflict added to file name
 
 unidirectional conflict resolution:
-  -m [PATTERN ...], --mirror-patterns [PATTERN ...]
+  -m, --mirror-patterns [PATTERN ...]
                                      in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space
                                      if no PATTERN is specified, all files will be mirrored
 ```

@@ -2,6 +2,7 @@
 
 ## vNext
 
+- Add --filter, --ignore and --ignore-not (local, remote, both) options
 - Track changes during sync and save them on exception
 
 ## 0.9.2

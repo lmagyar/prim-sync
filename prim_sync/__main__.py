@@ -129,6 +129,12 @@ class Options:
     use_mtime_for_comparison: bool = True
     use_content_for_comparison: bool = True
     use_hash_for_content_comparison: bool = True
+    local_filter_patterns: set[str] = field(default_factory=set)
+    local_ignore_patterns: set[str] = field(default_factory=set)
+    local_ignore_not_patterns: set[str] = field(default_factory=set)
+    remote_filter_patterns: set[str] = field(default_factory=set)
+    remote_ignore_patterns: set[str] = field(default_factory=set)
+    remote_ignore_not_patterns: set[str] = field(default_factory=set)
     newer_wins: bool = False
     older_wins: bool = False
     change_wins_over_deletion: bool = False
@@ -223,6 +229,9 @@ def set_file_time(full_path, btime: float | None, atime: float | None, mtime: fl
         raise WinError()
     if not wintypes.BOOL(CloseHandle(handle)):
         raise WinError()
+
+def prefix_or_fnmatch(name: str, pat: str):
+    return pat.startswith(name) or fnmatch(name, pat)
 
 ########
 
@@ -338,16 +347,22 @@ class Local:
                         os.rename(self.local_path / path / new_entry_name, self.local_path / path / entry_name)
                     os.remove(self.local_path / path / old_entry_name)
             for entry in sorted(entries.values(), key=lambda e: e.name):
-                relative_path = path / entry.name
-                relative_name = str(relative_path)
                 if entry.name == STATE_DIR_NAME or entry.name == LOCK_FILE_NAME or entry.name.endswith(CONFLICT_FILE_SUFFIX):
                     continue
-                if entry.is_dir(follow_symlinks=True):
+                relative_path = path / entry.name
+                relative_name = str(relative_path)
+                if is_dir := entry.is_dir(follow_symlinks=True):
+                    relative_name += '/'
+                if (options.local_filter_patterns and not any(prefix_or_fnmatch(relative_name, p) for p in options.local_filter_patterns)
+                        or options.local_ignore_patterns and any(fnmatch(relative_name, p) for p in options.local_ignore_patterns)
+                            and (not options.local_ignore_not_patterns or not any(fnmatch(relative_name, p) for p in options.local_ignore_not_patterns))):
+                    continue
+                if is_dir:
                     if is_destination and not options.folder_symlink_as_destination:
                         if entry.is_symlink() or entry.is_junction():
                             logger.warning("<<< SYMLINK %s/%s", self.local_folder, relative_name)
                             self._has_unsupported_folder_symlink = True
-                    yield relative_name + '/', None
+                    yield relative_name, None
                     yield from _scandir(relative_path)
                 else:
                     if is_destination and not options.overwrite_destination:
@@ -587,12 +602,18 @@ class Remote:
                         self.sftp.rename(str(self.remote_write_path / path / new_entry_name), str(self.remote_write_path / path / entry_name))
                     self.sftp.remove(str(self.remote_write_path / path / old_entry_name))
             for entry in sorted(entries.values(), key=lambda e: e.filename):
-                relative_path = path / entry.filename
-                relative_name = str(relative_path)
                 if entry.filename == STATE_DIR_NAME or entry.filename == LOCK_FILE_NAME or entry.filename.endswith(CONFLICT_FILE_SUFFIX):
                     continue
-                if stat.S_ISDIR(entry.st_mode or 0):
-                    yield relative_name + '/', None
+                relative_path = path / entry.filename
+                relative_name = str(relative_path)
+                if is_dir := stat.S_ISDIR(entry.st_mode or 0):
+                    relative_name += '/'
+                if (options.remote_filter_patterns and not any(prefix_or_fnmatch(relative_name, p) for p in options.remote_filter_patterns)
+                        or options.remote_ignore_patterns and any(fnmatch(relative_name, p) for p in options.remote_ignore_patterns)
+                            and (not options.remote_ignore_not_patterns or not any(fnmatch(relative_name, p) for p in options.remote_ignore_not_patterns))):
+                    continue
+                if is_dir:
+                    yield relative_name, None
                     yield from _scandir(relative_path)
                 else:
                     yield relative_name, FileInfo(size=entry.st_size or 0, mtime=datetime.fromtimestamp(entry.st_mtime or 0, timezone.utc))
@@ -983,15 +1004,24 @@ class Sync:
                 if fileinfo:
                     fileinfo.mtime += remote_time_shift
 
-        self.local_new = _new_entries(self.local_current, self.local_previous)
-        self.local_deleted = _deleted_entries(self.local_current, self.local_previous)
-        self.local_changed = _changed_entries(self.local_current, self.local_previous)
-        self.local_unchanged = _unchanged_entries(self.local_current, self.local_previous)
+        local_previous_filtered = {k: v for k, v in self.local_previous.items()
+            if (not options.local_filter_patterns or any(prefix_or_fnmatch(k, p) for p in options.local_filter_patterns))
+            and (not options.local_ignore_patterns or not any(fnmatch(k, p) for p in options.local_ignore_patterns)
+                or options.local_ignore_not_patterns and any(fnmatch(k, p) for p in options.local_ignore_not_patterns))}
+        remote_previous_filtered = {k: v for k, v in self.remote_previous.items()
+            if (not options.remote_filter_patterns or any(prefix_or_fnmatch(k, p) for p in options.remote_filter_patterns))
+            and (not options.remote_ignore_patterns or not any(fnmatch(k, p) for p in options.remote_ignore_patterns)
+                or options.remote_ignore_not_patterns and any(fnmatch(k, p) for p in options.remote_ignore_not_patterns))}
 
-        self.remote_new = _new_entries(self.remote_current, self.remote_previous)
-        self.remote_deleted = _deleted_entries(self.remote_current, self.remote_previous)
-        self.remote_changed = _changed_entries(self.remote_current, self.remote_previous)
-        self.remote_unchanged = _unchanged_entries(self.remote_current, self.remote_previous)
+        self.local_new = _new_entries(self.local_current, local_previous_filtered)
+        self.local_deleted = _deleted_entries(self.local_current, local_previous_filtered)
+        self.local_changed = _changed_entries(self.local_current, local_previous_filtered)
+        self.local_unchanged = _unchanged_entries(self.local_current, local_previous_filtered)
+
+        self.remote_new = _new_entries(self.remote_current, remote_previous_filtered)
+        self.remote_deleted = _deleted_entries(self.remote_current, remote_previous_filtered)
+        self.remote_changed = _changed_entries(self.remote_current, remote_previous_filtered)
+        self.remote_unchanged = _unchanged_entries(self.remote_current, remote_previous_filtered)
 
         self.delete_local = set()
         self.delete_remote = set()
@@ -1607,8 +1637,8 @@ def main():
         parser.add_argument('-d', '--dry', help="no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up", default=False, action='store_true')
         parser.add_argument('-D', '--dry-on-conflict', help="in case of unresolved conflict(s), run dry", default=False, action='store_true')
         parser.add_argument('-rs', '--remote-state-prefix', metavar="PATH", help="stores remote state in a common .prim-sync folder under PATH instead of under the remote-folder argument (decreases SD card wear), eg. /fs/storage/emulated/0\n"
-                            "Note: currently only the .lock file is stored here\n"
-                            "Note: if you access the same server from multiple clients, you have to specify the same --remote-state-prefix option everywhere to prevent concurrent access")
+            "Note: currently only the .lock file is stored here\n"
+            "Note: if you access the same server from multiple clients, you have to specify the same --remote-state-prefix option everywhere to prevent concurrent access")
         parser.add_argument('--overwrite-destination', help="don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot when used with bidirectional sync", default=False, action='store_true')
         parser.add_argument('--folder-symlink-as-destination', help="enables writing and deleting symlinked folders and files in them on the local side - it can make sense, but you will definitely shoot yourself in the foot", default=False, action='store_true')
         parser.add_argument('--ignore-locks', nargs='?', metavar="MINUTES", help="ignore locks left over from previous run, optionally only if they are older than MINUTES minutes", type=int, default=None, const=0, action='store')
@@ -1625,6 +1655,19 @@ def main():
         comparison_group.add_argument('-C', '--dont-use-content-for-comparison', dest="use_content_for_comparison", help="beyond size, modification time or content must be equal, if both are disabled, only size is compared", default=True, action='store_false')
         comparison_group.add_argument('-H', '--dont-use-hash-for-content-comparison', dest="use_hash_for_content_comparison", help="not all sftp servers support hashing, but downloading content for comparison is much slower than hashing", default=True, action='store_false')
 
+        filtering_group = parser.add_argument_group('filtering', description=
+            "Note: ignore patterns have higher priority than filter patterns\n"
+            "Note: ignore-not patterns have higher priority than ignore patterns")
+        filtering_group.add_argument('-f', '--filter', nargs='+', metavar="PATTERN", help="only files matching this Unix shell PATTERN will be scanned, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-i', '--ignore', nargs='+', metavar="PATTERN", help="only files not matching this Unix shell PATTERN will be scanned, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-in', '--ignore-not', nargs='+', metavar="PATTERN", help="files matching this Unix shell PATTERN will not be ignored, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-lf', '--local-filter', nargs='+', metavar="PATTERN", help="only files matching this Unix shell PATTERN will be scanned locally, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-li', '--local-ignore', nargs='+', metavar="PATTERN", help="only files not matching this Unix shell PATTERN will be scanned locally, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-lin', '--local-ignore-not', nargs='+', metavar="PATTERN", help="files matching this Unix shell PATTERN will not be ignored locally, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-rf', '--remote-filter', nargs='+', metavar="PATTERN", help="only files matching this Unix shell PATTERN will be scanned remotely, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-ri', '--remote-ignore', nargs='+', metavar="PATTERN", help="only files not matching this Unix shell PATTERN will be scanned remotely, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-rin', '--remote-ignore-not', nargs='+', metavar="PATTERN", help="files matching this Unix shell PATTERN will not be ignored remotely, multiple values are allowed, separated by space")
+
         bidir_conflict_resolution_group = parser.add_argument_group('bidirectional conflict resolution')
         bidir_conflict_resolution_newer_older_group = bidir_conflict_resolution_group.add_mutually_exclusive_group()
         bidir_conflict_resolution_newer_older_group.add_argument('-n', '--newer-wins', help="in case of conflict, newer file wins", default=False, action='store_true')
@@ -1633,15 +1676,15 @@ def main():
         bidir_conflict_resolution_change_deletion_group.add_argument('-cod', '--change-wins-over-deletion', help="in case of conflict, changed/new file wins over deleted file", default=False, action='store_true')
         bidir_conflict_resolution_change_deletion_group.add_argument('-doc', '--deletion-wins-over-change', help="in case of conflict, deleted file wins over changed/new file", default=False, action='store_true')
         bidir_conflict_resolution_group.add_argument('-l', '--local-wins-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, local files matching this Unix shell PATTERN win, multiple values are allowed, separated by space\n"
-                                                      "if no PATTERN is specified, local always wins")
+            "if no PATTERN is specified, local always wins")
         bidir_conflict_resolution_group.add_argument('-r', '--remote-wins-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space\n"
-                                                      "if no PATTERN is specified, remote always wins")
+            "if no PATTERN is specified, remote always wins")
         bidir_conflict_resolution_group.add_argument('-cl', '--copy-to-local', help="in case of conflict, copy remote file to local with .prim-sync.conflict added to file name", default=False, action='store_true')
         bidir_conflict_resolution_group.add_argument('-cr', '--copy-to-remote', help="in case of conflict, copy local file to remote with .prim-sync.conflict added to file name", default=False, action='store_true')
 
         unidir_conflict_resolution_group = parser.add_argument_group('unidirectional conflict resolution')
         unidir_conflict_resolution_group.add_argument('-m', '--mirror-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space\n"
-                                                      "if no PATTERN is specified, all files will be mirrored")
+            "if no PATTERN is specified, all files will be mirrored")
 
         args = parser.parse_args()
 
@@ -1661,6 +1704,12 @@ def main():
             use_mtime_for_comparison=args.use_mtime_for_comparison,
             use_content_for_comparison=args.use_content_for_comparison,
             use_hash_for_content_comparison=args.use_hash_for_content_comparison,
+            local_filter_patterns=set((args.filter or []) + (args.local_filter or [])),
+            local_ignore_patterns=set((args.ignore or []) + (args.local_ignore or [])),
+            local_ignore_not_patterns=set((args.ignore_not or []) + (args.local_ignore_not or [])),
+            remote_filter_patterns=set((args.filter or []) + (args.remote_filter or [])),
+            remote_ignore_patterns=set((args.ignore or []) + (args.remote_ignore or [])),
+            remote_ignore_not_patterns=set((args.ignore_not or []) + (args.remote_ignore_not or [])),
             newer_wins=args.newer_wins,
             older_wins=args.older_wins,
             change_wins_over_deletion=args.change_wins_over_deletion,
