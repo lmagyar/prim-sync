@@ -40,7 +40,7 @@ class LevelFormatter(logging.Formatter):
 
     def __init__(self, fmts: dict[int, str], fmt: str, **kwargs):
         super().__init__()
-        self.formatters = dict({level: logging.Formatter(fmt, **kwargs) for level, fmt in fmts.items()})
+        self.formatters = {level: logging.Formatter(fmt, **kwargs) for level, fmt in fmts.items()}
         self.default_formatter = logging.Formatter(fmt, **kwargs)
 
     def format(self, record: logging.LogRecord) -> str:
@@ -310,7 +310,7 @@ class Local:
         def _scandir(path: PurePosixPath):
             logger.debug("Scanning local %s", str(self.local_path / path))
             while True: # recovery
-                entries = dict({e.name: e for e in os.scandir(self.local_path / path)})
+                entries = {e.name: e for e in os.scandir(self.local_path / path)}
                 oldtmpnew_entries = list([e for e in entries.keys() if e.endswith(OLD_FILE_SUFFIX) or e.endswith(TMP_FILE_SUFFIX) or e.endswith(NEW_FILE_SUFFIX)])
                 if not oldtmpnew_entries:
                     break
@@ -559,7 +559,7 @@ class Remote:
         def _scandir(path: PurePosixPath):
             logger.info_scanning("Scanning    %s", str(self.local_folder / path))
             while True: # recovery
-                entries = dict({e.filename: e for e in self.sftp.listdir_attr(str(self.remote_read_path / path))})
+                entries = {e.filename: e for e in self.sftp.listdir_attr(str(self.remote_read_path / path))}
                 oldtmpnew_entries = list([e for e in entries.keys() if e.endswith(OLD_FILE_SUFFIX) or e.endswith(TMP_FILE_SUFFIX) or e.endswith(NEW_FILE_SUFFIX)])
                 if not oldtmpnew_entries:
                     break
