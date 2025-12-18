@@ -436,15 +436,11 @@ class Local:
 
     def download(self, relative_path: str, rename: bool, remote_open_fn, remote_stat_fn, local_fileinfo: LocalFileInfo | None, remote_fileinfo: FileInfo):
         def _copy(to_full_path: str):
-            try:
-                with (
-                    remote_open_fn(relative_path) as remote_file,
-                    open(to_full_path, "wb") as local_file
-                ):
-                    shutil.copyfileobj(remote_file, local_file)
-                return True
-            except IOError:
-                return False # any error on any side
+            with (
+                remote_open_fn(relative_path) as remote_file,
+                open(to_full_path, "wb") as local_file
+            ):
+                shutil.copyfileobj(remote_file, local_file)
         def _utime(full_path: str):
             os.utime(full_path, (remote_fileinfo.mtime.timestamp(), remote_fileinfo.mtime.timestamp()), follow_symlinks=True)
         def _set_file_time(full_path: str):
@@ -485,29 +481,29 @@ class Local:
             old_full_path = full_path + OLD_FILE_SUFFIX
             tmp_full_path = full_path + TMP_FILE_SUFFIX
             new_full_path = full_path + NEW_FILE_SUFFIX
-            if _copy(new_full_path):
-                if local_fileinfo and SETFILETIME_SUPPORTED:
-                    _set_file_time(new_full_path)
-                else:
-                    _utime(new_full_path)
-                new_fileinfo = _fileinfo(new_full_path)
-                if local_fileinfo:
-                    if _commitexisting(full_path, tmp_full_path, old_full_path):
-                        os.rename(new_full_path, full_path)
-                        os.remove(old_full_path)
-                        return new_fileinfo
-                else:
-                    if _commitnew(new_full_path, full_path):
-                        return new_fileinfo
+            _copy(new_full_path)
+            if local_fileinfo and SETFILETIME_SUPPORTED:
+                _set_file_time(new_full_path)
+            else:
+                _utime(new_full_path)
+            new_fileinfo = _fileinfo(new_full_path)
+            if local_fileinfo and _commitexisting(full_path, tmp_full_path, old_full_path):
+                os.rename(new_full_path, full_path)
+                os.remove(old_full_path)
+                return new_fileinfo
+            elif not local_fileinfo and _commitnew(new_full_path, full_path):
+                return new_fileinfo
+            else:
+                return None
         elif options.overwrite_destination:
-            if _copy(full_path):
-                _utime(full_path)
-                return _fileinfo(full_path)
+            _copy(full_path)
+            _utime(full_path)
+            return _fileinfo(full_path)
         else: # rename
             full_path += CONFLICT_FILE_SUFFIX
-            if _copy(full_path):
-                _utime(full_path)
-        return None
+            _copy(full_path)
+            _utime(full_path)
+            return None
 
     def mkdir(self, relative_path: str):
         full_path = str(self.local_path / relative_path)
@@ -673,15 +669,11 @@ class Remote:
 
     def upload(self, local_open_fn, local_stat_fn, relative_path: str, rename: bool, local_fileinfo: FileInfo, remote_fileinfo: FileInfo | None):
         def _copy(to_full_path: str):
-            try:
-                with (
-                    local_open_fn(relative_path) as local_file,
-                    self.sftp.open(to_full_path, "w") as remote_file
-                ):
-                    shutil.copyfileobj(local_file, remote_file)
-                return True
-            except IOError:
-                return False # any error on any side
+            with (
+                local_open_fn(relative_path) as local_file,
+                self.sftp.open(to_full_path, "w") as remote_file
+            ):
+                shutil.copyfileobj(local_file, remote_file)
         def _utime(full_path: str):
             self.sftp.utime(full_path, (local_fileinfo.mtime.timestamp(), local_fileinfo.mtime.timestamp()))
         def _fileinfo(full_path: str):
@@ -716,26 +708,26 @@ class Remote:
             old_full_path = full_path + OLD_FILE_SUFFIX
             tmp_full_path = full_path + TMP_FILE_SUFFIX
             new_full_path = full_path + NEW_FILE_SUFFIX
-            if _copy(new_full_path):
-                _utime(new_full_path)
-                new_fileinfo = _fileinfo(new_full_path)
-                if remote_fileinfo:
-                    if _commitexisting(full_path, tmp_full_path, old_full_path):
-                        self.sftp.rename(new_full_path, full_path)
-                        self.sftp.remove(old_full_path)
-                        return new_fileinfo
-                else:
-                    if _commitnew(new_full_path, full_path):
-                        return new_fileinfo
+            _copy(new_full_path)
+            _utime(new_full_path)
+            new_fileinfo = _fileinfo(new_full_path)
+            if remote_fileinfo and _commitexisting(full_path, tmp_full_path, old_full_path):
+                self.sftp.rename(new_full_path, full_path)
+                self.sftp.remove(old_full_path)
+                return new_fileinfo
+            elif not remote_fileinfo and _commitnew(new_full_path, full_path):
+                return new_fileinfo
+            else:
+                return None
         elif options.overwrite_destination:
-            if _copy(full_path):
-                _utime(full_path)
-                return _fileinfo(full_path)
+            _copy(full_path)
+            _utime(full_path)
+            return _fileinfo(full_path)
         else: # rename
             full_path += CONFLICT_FILE_SUFFIX
-            if _copy(full_path):
-                _utime(full_path)
-        return None
+            _copy(full_path)
+            _utime(full_path)
+            return None
 
     def mkdir(self, relative_path: str):
         full_path = str(self.remote_write_path / relative_path)
