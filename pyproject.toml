@@ -3,7 +3,7 @@ packages = [{include = "prim_sync"}]
 
 [project]
 name = "prim-sync"
-version = "0.9.2"
+version = "0.10.0rc06"
 description = "Primitive Sync - Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the Primitive FTPd Android SFTP server."
 license = "Apache-2.0"
 authors = [

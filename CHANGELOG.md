@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.10.0
 
 - Fix: do not hide copy errors
 - Add --filter, --ignore and --ignore-not (local, remote, both) options
