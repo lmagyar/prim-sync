@@ -1153,10 +1153,14 @@ class Sync:
     def run(self):
         self.load()
         self.collect()
+        logger.debug("Local previous count:  %d, Local current count:  %d", len(self.local_previous), len(self.local_current))
+        logger.debug("Remote previous count: %d, Remote current count: %d", len(self.remote_previous), len(self.remote_current))
         try:
             self.compare()
             self.execute()
         finally:
+            logger.debug("Local tracking count:  %d, Local current count:  %d", len(self.local_tracking), len(self.local_current))
+            logger.debug("Remote tracking count: %d, Remote current count: %d", len(self.remote_tracking), len(self.remote_current))
             self.save()
 
 # Bidirectional comparison
