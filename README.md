@@ -384,8 +384,10 @@ bidirectional conflict resolution:
   -r, --remote-wins-patterns [PATTERN ...]
                                      in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space
                                      if no PATTERN is specified, remote always wins
-  -cl, --copy-to-local               in case of conflict, copy remote file to local with .prim-sync.conflict added to file name
-  -cr, --copy-to-remote              in case of conflict, copy local file to remote with .prim-sync.conflict added to file name
+  -cl, --copy-to-local               in case of conflict, copy remote file to local with timestamp and .prim-sync.conflict added to file name
+                                     remote file treated as synchronized from now on
+  -cr, --copy-to-remote              in case of conflict, copy local file to remote with timestamp and .prim-sync.conflict added to file name
+                                     local file treated as synchronized from now on
 
 unidirectional conflict resolution:
   -m, --mirror-patterns [PATTERN ...]

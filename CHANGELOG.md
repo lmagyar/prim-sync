@@ -2,6 +2,7 @@
 
 ## 0.10.0
 
+- Copy-to-local/remote adds original file's timestamp also to the copied filename
 - Use local timezone in log messages
 - Fix: do not hide copy errors
 - Add --filter, --ignore and --ignore-not (local, remote, both) options

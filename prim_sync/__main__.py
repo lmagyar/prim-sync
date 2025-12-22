@@ -500,7 +500,7 @@ class Local:
             _utime(full_path)
             return _fileinfo(full_path)
         else: # rename
-            full_path += CONFLICT_FILE_SUFFIX
+            full_path += remote_fileinfo.mtime.astimezone().strftime(".%Y%m%d-%H%M%S") + CONFLICT_FILE_SUFFIX
             _copy(full_path)
             _utime(full_path)
             return None
@@ -724,7 +724,7 @@ class Remote:
             _utime(full_path)
             return _fileinfo(full_path)
         else: # rename
-            full_path += CONFLICT_FILE_SUFFIX
+            full_path += local_fileinfo.mtime.astimezone().strftime(".%Y%m%d-%H%M%S") + CONFLICT_FILE_SUFFIX
             _copy(full_path)
             _utime(full_path)
             return None
@@ -1675,8 +1675,10 @@ def main():
             "if no PATTERN is specified, local always wins")
         bidir_conflict_resolution_group.add_argument('-r', '--remote-wins-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space\n"
             "if no PATTERN is specified, remote always wins")
-        bidir_conflict_resolution_group.add_argument('-cl', '--copy-to-local', help="in case of conflict, copy remote file to local with .prim-sync.conflict added to file name", default=False, action='store_true')
-        bidir_conflict_resolution_group.add_argument('-cr', '--copy-to-remote', help="in case of conflict, copy local file to remote with .prim-sync.conflict added to file name", default=False, action='store_true')
+        bidir_conflict_resolution_group.add_argument('-cl', '--copy-to-local', help="in case of conflict, copy remote file to local with timestamp and .prim-sync.conflict added to file name\n"
+            "remote file treated as synchronized from now on", default=False, action='store_true')
+        bidir_conflict_resolution_group.add_argument('-cr', '--copy-to-remote', help="in case of conflict, copy local file to remote with timestamp and .prim-sync.conflict added to file name\n"
+            "local file treated as synchronized from now on", default=False, action='store_true')
 
         unidir_conflict_resolution_group = parser.add_argument_group('unidirectional conflict resolution')
         unidir_conflict_resolution_group.add_argument('-m', '--mirror-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space\n"
