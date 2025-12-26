@@ -17,7 +17,7 @@ from itertools import chain
 from pathlib import Path, PurePath, PurePosixPath
 from typing import Self, cast
 
-from paramiko import SSHClient, SFTPClient, MissingHostKeyPolicy, RejectPolicy
+from paramiko import SSHClient, SFTPClient, MissingHostKeyPolicy
 from paramiko.ssh_exception import NoValidConnectionsError, BadHostKeyException, SSHException
 from platformdirs import user_cache_dir
 from zeroconf import Zeroconf
