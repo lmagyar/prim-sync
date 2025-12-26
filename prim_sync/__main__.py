@@ -1,5 +1,4 @@
 
-from abc import abstractmethod
 import argparse
 import hashlib
 import logging
@@ -10,12 +9,13 @@ import signal
 import socket
 import stat
 import sys
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from fnmatch import fnmatch
 from itertools import chain
 from pathlib import Path, PurePath, PurePosixPath
-from typing import Self, cast
+from typing import cast
 
 from paramiko import SSHClient, SFTPClient, MissingHostKeyPolicy
 from paramiko.ssh_exception import NoValidConnectionsError, BadHostKeyException, SSHException
