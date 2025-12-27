@@ -2,6 +2,7 @@
 
 ## 0.10.0
 
+- Don't print microseonds in the log
 - Ctrl-C/KeyboardInterrupt results in exit code 130
 - Copy-to-local/remote adds original file's timestamp also to the copied filename
 - Use local timezone in log messages

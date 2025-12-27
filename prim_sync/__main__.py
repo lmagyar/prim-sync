@@ -815,7 +815,7 @@ class Remote:
             if lock_stat is None and options.ignore_locks is None:
                 lock_stat = _get_stat(lock_file_name)
             if lock_stat is not None and lock_stat.st_mtime:
-                e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(lock_stat.st_mtime).astimezone()}")
+                e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(lock_stat.st_mtime).replace(microsecond=0).astimezone()}")
             raise
 
     def _unlock(self):
@@ -1083,7 +1083,7 @@ class Sync:
             else:
                 remote_fileinfo = cast(FileInfo, self.remote_current[relative_path])
                 rename = relative_path in self.download_with_rename
-                logger.info("<<<<<<< %s %s/%s, size: %s, time: %s", "   " if not rename else "!!!", self.local.local_folder, relative_path, _filesize_fmt(remote_fileinfo.size), remote_fileinfo.mtime.astimezone())
+                logger.info("<<<<<<< %s %s/%s, size: %s, time: %s", "   " if not rename else "!!!", self.local.local_folder, relative_path, _filesize_fmt(remote_fileinfo.size), remote_fileinfo.mtime.replace(microsecond=0).astimezone())
                 if not options.dry:
                     if not rename:
                         if new_local_fileinfo := self.local.download(relative_path, False, self.remote.open, self.remote.stat, self.local_current.get(relative_path), remote_fileinfo):
@@ -1106,7 +1106,7 @@ class Sync:
             else:
                 local_fileinfo = cast(FileInfo, self.local_current[relative_path])
                 rename = relative_path in self.upload_with_rename
-                logger.info("%s >>>>>>> %s/%s, size: %s, time: %s", "   " if not rename else "!!!", self.local.local_folder, relative_path, _filesize_fmt(local_fileinfo.size), local_fileinfo.mtime.astimezone())
+                logger.info("%s >>>>>>> %s/%s, size: %s, time: %s", "   " if not rename else "!!!", self.local.local_folder, relative_path, _filesize_fmt(local_fileinfo.size), local_fileinfo.mtime.replace(microsecond=0).astimezone())
                 if not options.dry:
                     if not rename:
                         if new_remote_fileinfo := self.remote.upload(self.local.open, self.local.stat, relative_path, False, local_fileinfo, self.remote_current.get(relative_path)):
@@ -1125,7 +1125,7 @@ class Sync:
                         f", size: {_filesize_fmt(left_fileinfo.size)} ({format(left_fileinfo.size, ',d').replace(',',' ')}) "
                             f"{'>' if left_fileinfo.size > right_fileinfo.size else '<' if left_fileinfo.size < right_fileinfo.size else '='} "
                             f"{_filesize_fmt(right_fileinfo.size)} ({format(right_fileinfo.size, ',d').replace(',',' ')})"
-                        f", time: {left_fileinfo.mtime.astimezone()} {'>' if left_fileinfo.mtime > right_fileinfo.mtime else '<' if left_fileinfo.mtime < right_fileinfo.mtime else '='} {right_fileinfo.mtime.astimezone()}")
+                        f", time: {left_fileinfo.mtime.replace(microsecond=0).astimezone()} {'>' if left_fileinfo.mtime > right_fileinfo.mtime else '<' if left_fileinfo.mtime < right_fileinfo.mtime else '='} {right_fileinfo.mtime.replace(microsecond=0).astimezone()}")
                 extended_reason = f"              {reason}"
                 local_fileinfo = self.local_current.get(relative_path)
                 remote_fileinfo = self.remote_current.get(relative_path)
@@ -1141,7 +1141,7 @@ class Sync:
                     if fileinfo and previous_fileinfo:
                         extended_reason += _extended_reason_compare(previous_fileinfo, fileinfo)
                     elif fileinfo:
-                        extended_reason += f", size: {_filesize_fmt(fileinfo.size)} ({format(fileinfo.size, ',d').replace(',',' ')}), time: {fileinfo.mtime.astimezone()}"
+                        extended_reason += f", size: {_filesize_fmt(fileinfo.size)} ({format(fileinfo.size, ',d').replace(',',' ')}), time: {fileinfo.mtime.replace(microsecond=0).astimezone()}"
                 return extended_reason
             logger.warning("<<< !!! >>> %s/%s", self.local.local_folder, relative_path)
             logger.warning(LazyStr(_extended_reason))
