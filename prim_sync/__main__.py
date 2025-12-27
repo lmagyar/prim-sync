@@ -10,12 +10,14 @@ import socket
 import stat
 import sys
 from abc import abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from fnmatch import fnmatch
 from itertools import chain
 from pathlib import Path, PurePath, PurePosixPath
-from typing import cast
+from types import FrameType
+from typing import cast, Callable, Iterator, Optional, Tuple
 
 from paramiko import SSHClient, SFTPClient, MissingHostKeyPolicy
 from paramiko.ssh_exception import NoValidConnectionsError, BadHostKeyException, SSHException
@@ -234,6 +236,70 @@ def set_file_time(full_path, btime: float | None, atime: float | None, mtime: fl
 
 def prefix_or_fnmatch(name: str, pat: str):
     return pat.startswith(name) or fnmatch(name, pat)
+
+########
+
+# based on https://stackoverflow.com/a/71330357/2755656
+class SignalFence():
+    def __init__(self, signum: signal.Signals, on_deferred_signal: Optional[Callable[[int, Optional[FrameType]], None]] = None):
+        self.signum = signum
+        self.on_deferred_signal = on_deferred_signal
+        self.deferred_signal: Optional[Tuple[int, Optional[FrameType]]] = None
+        self.enabled = True
+        self.original_handler = signal.getsignal(signum)
+        if self.original_handler is None:
+            raise TypeError("signal_fence cannot be used with signal handlers that were not installed from Python")
+        if isinstance(self.original_handler, int) and not isinstance(self.original_handler, signal.Handlers):
+            raise NotImplementedError("Your Python interpreter's signal module is using raw integers to represent SIG_IGN and SIG_DFL, which shouldn't be possible!")
+
+    def _handler(self, signum: int, frame: Optional[FrameType]) -> None:
+        if self.deferred_signal is None:
+            self.deferred_signal = (signum, frame)
+        if self.on_deferred_signal is not None:
+            try:
+                self.on_deferred_signal(signum, frame)
+            except:
+                pass
+
+    def disable(self) -> None:
+        if self.enabled:
+            self.enabled = False
+            self.deferred_signal = None
+            logger.debug("Disabling signal %d", self.signum)
+            signal.signal(self.signum, self._handler)
+
+    def enable(self) -> None:
+        if not self.enabled:
+            self.enabled = True
+            logger.debug("Enabling signal %d", self.signum)
+            signal.signal(self.signum, self.original_handler)
+            if (deferred_signal := self.deferred_signal) is not None:
+                self.deferred_signal = None
+                logger.debug("Handling deferred signal %d", self.signum)
+                if isinstance(self.original_handler, signal.Handlers):
+                    if self.original_handler is signal.Handlers.SIG_IGN:
+                        pass
+                    elif self.original_handler is signal.Handlers.SIG_DFL:
+                        signal.signal(self.signum, signal.SIG_DFL)
+                        os.kill(os.getpid(), self.signum)
+                elif callable(self.original_handler):
+                    self.original_handler(*deferred_signal)
+
+    @contextmanager
+    def protect(self) -> Iterator[SignalFence]:
+        try:
+            self.disable()
+            yield self
+        finally:
+            self.enable()
+
+    @contextmanager
+    def unprotect(self) -> Iterator[SignalFence]:
+        try:
+            self.enable()
+            yield self
+        finally:
+            self.disable()
 
 ########
 
@@ -891,10 +957,11 @@ class Storage:
             return State(dict(), dict(), None)
 
 class Sync:
-    def __init__(self, local: Local, remote: Remote, storage: Storage):
+    def __init__(self, local: Local, remote: Remote, storage: Storage, keyboard_interrupt: SignalFence):
         self.local = local
         self.remote = remote
         self.storage = storage
+        self.keyboard_interrupt = keyboard_interrupt
 
     def _is_identical(self, relative_path: str, use_compare_for_content_comparison: bool = True):
         def __is_identical():
@@ -1154,16 +1221,18 @@ class Sync:
 
     def run(self):
         self.load()
-        self.collect()
-        logger.debug("Local previous count:  %d, Local current count:  %d", len(self.local_previous), len(self.local_current))
-        logger.debug("Remote previous count: %d, Remote current count: %d", len(self.remote_previous), len(self.remote_current))
-        try:
-            self.compare()
-            self.execute()
-        finally:
-            logger.debug("Local tracking count:  %d, Local current count:  %d", len(self.local_tracking), len(self.local_current))
-            logger.debug("Remote tracking count: %d, Remote current count: %d", len(self.remote_tracking), len(self.remote_current))
-            self.save()
+        with self.keyboard_interrupt.unprotect():
+            self.collect()
+            logger.debug("Local previous count:  %d, Local current count:  %d", len(self.local_previous), len(self.local_current))
+            logger.debug("Remote previous count: %d, Remote current count: %d", len(self.remote_previous), len(self.remote_current))
+            try:
+                self.compare()
+                self.execute()
+            finally:
+                logger.debug("Local tracking count:  %d, Local current count:  %d", len(self.local_tracking), len(self.local_current))
+                logger.debug("Remote tracking count: %d, Remote current count: %d", len(self.remote_tracking), len(self.remote_current))
+                self.keyboard_interrupt.disable()
+                self.save()
 
 # Bidirectional comparison
 #
@@ -1774,16 +1843,17 @@ def main():
                 _connect_ssh(10, 30)
                 with (
                     ssh.open_sftp() as sftp,
+                    SignalFence(signal.SIGINT, lambda signum, frame: logger.debug("Keyboard interrupt received, finishing ongoing operations before exit")).protect() as keyboard_interrupt,
                     Local(local_folder, local_path) as local,
                     Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote
                 ):
                     storage = Storage(local_path, args.server_name)
                     if args.unidirectional_inward:
-                        sync = UnidirectionalInwardSync(local, remote, storage)
+                        sync = UnidirectionalInwardSync(local, remote, storage, keyboard_interrupt)
                     elif args.unidirectional_outward:
-                        sync = UnidirectionalOutwardSync(local, remote, storage)
+                        sync = UnidirectionalOutwardSync(local, remote, storage, keyboard_interrupt)
                     else:
-                        sync = BidirectionalSync(local, remote, storage)
+                        sync = BidirectionalSync(local, remote, storage, keyboard_interrupt)
                     sync.run()
 
     except Exception as e:

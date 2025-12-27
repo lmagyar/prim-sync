@@ -2,6 +2,7 @@
 
 ## 0.10.0
 
+- Protect against Ctrl-C/KeyboardInterrupt in critical steps
 - Don't print microseonds in the log
 - Ctrl-C/KeyboardInterrupt results in exit code 130
 - Copy-to-local/remote adds original file's timestamp also to the copied filename
