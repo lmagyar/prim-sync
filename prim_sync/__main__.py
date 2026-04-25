@@ -1124,7 +1124,7 @@ class Sync:
             logger.info("<<< DEL     %s/%s", self.local.local_folder, relative_path)
             if not options.dry:
                 if self.local.remove(relative_path, self.local_current[relative_path]):
-                    del self.local_tracking[relative_path]
+                    self.local_tracking.pop(relative_path, None)
                     self.remote_tracking.pop(relative_path, None)
                 else:
                     logger.info("< CHANGED     will be processed only on the next run")
@@ -1135,7 +1135,7 @@ class Sync:
             if not options.dry:
                 if self.remote.remove(relative_path, self.remote_current[relative_path]):
                     self.local_tracking.pop(relative_path, None)
-                    del self.remote_tracking[relative_path]
+                    self.remote_tracking.pop(relative_path, None)
                 else:
                     logger.info("  CHANGED >   will be processed only on the next run")
 
