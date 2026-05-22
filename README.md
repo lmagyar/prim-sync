@@ -256,9 +256,9 @@ We can protect the private SSH key generated above with a passphrase and use the
 
 Create a backup of your files!!! Really!!! If you use symlinks, this is only question of time when will you delete something unintendedly!!!
 
-The first upload is better done over USB connection and manual copy, because copying files over Wi-Fi is much slower.
+The first file upload can be done over USB connection and manual copy also, because copying files over Wi-Fi is slower.
 
-The first run will be longer than a regular run, because without prior knowledge, the prim-sync script handles all files on both sides as newly created and compares them or their hashes (hashing is much faster than downloading and comparing the content).
+The first prim-sync run will be longer than a regular run, because without prior knowledge, the script handles all files on both sides as newly created and compares them or their hashes (hashing is much faster than downloading and comparing the content).
 
 On regular runs the meaning of the log lines are:
 - `Scanning` - Name of the remote folder that is scanned (only remote is logged, remote is the bottleneck)
@@ -279,8 +279,9 @@ Notes:
   - preserved on Windows but not on Unix when the default restartable operation is used
   - unchanged when --overwrite-destination option is used
 - Files in the remote folder and it's subfolders must be on the same filesystem (ie. do not mix FAT and non-FAT filesystems, the prim-sync script assumes the FAT timezone or DST offset changes are the same for all files under the remote folder)
-- You can brainwash (ie. delete the state under the .prim-sync folder) between two runs. After this, the script will behave, as if the next run is the first run (see "first run" above).
+- You can brainwash (ie. delete the state under the .prim-sync folder) between two runs. After this, the script will behave as if the next run is the first run (see "first run" above).
 - Never ever delete any files where the name ends with .prim-sync.new or .tmp or .old, the pure existence of these files are the "transaction state", if you delete any of these files, the recovery algorythm won't be able to figure out in which phase got the restartable operation interrupted. If you delete any of these files, you are on your own to figure out how to recover from the interruption.
+- If you want to interrupt the synchronization, press Ctrl-C once (only once), and wait few seconds until the script properly removes temporary files and saves it's internal state. If you press Ctrl-C again, that interrupts the state persistence also, the next synchronization run will hash all changed files to recover from the interruption.
 
 ### Some example
 
