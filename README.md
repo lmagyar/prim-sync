@@ -281,7 +281,7 @@ Notes:
 - Files in the remote folder and it's subfolders must be on the same filesystem (ie. do not mix FAT and non-FAT filesystems, the prim-sync script assumes the FAT timezone or DST offset changes are the same for all files under the remote folder)
 - You can brainwash (ie. delete the state under the .prim-sync folder) between two runs. After this, the script will behave as if the next run is the first run (see "first run" above).
 - Never ever delete any files where the name ends with .prim-sync.new or .tmp or .old, the pure existence of these files are the "transaction state", if you delete any of these files, the recovery algorythm won't be able to figure out in which phase got the restartable operation interrupted. If you delete any of these files, you are on your own to figure out how to recover from the interruption.
-- If you want to interrupt the synchronization, press Ctrl-C once (only once), and wait few seconds until the script properly removes temporary files and saves it's internal state. If you press Ctrl-C again, that interrupts the state persistence also, the next synchronization run will hash all changed files to recover from the interruption.
+- If you want to interrupt the synchronization, press Ctrl-C once, and wait few seconds until the script properly removes temporary files and saves it's internal state.
 
 ### Some example
 
