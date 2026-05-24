@@ -1865,4 +1865,11 @@ def main():
     return logger.exitcode
 
 def run():
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    finally:
+        # Windows: suppress stderr during interpreter shutdown to silence asyncio
+        # transport __del__ exceptions (ValueError from closed pipes).
+        # This must happen after main() returns but before Python garbage collects.
+        if sys.platform == "win32":
+            sys.stderr = open(os.devnull, "w")
