@@ -1709,6 +1709,7 @@ def main():
         parser.add_argument('--overwrite-destination', help="don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot when used with bidirectional sync", default=False, action='store_true')
         parser.add_argument('--folder-symlink-as-destination', help="enables writing and deleting symlinked folders and files in them on the local side - it can make sense, but you will definitely shoot yourself in the foot", default=False, action='store_true')
         parser.add_argument('--ignore-locks', nargs='?', metavar="MINUTES", help="ignore locks left over from previous run, optionally only if they are older than MINUTES minutes", type=int, default=None, const=0, action='store')
+        parser.add_argument('--noop', help="no-operation, will connect but won't even scan the files - can be used to delete stale locks", default=False, action='store_true')
 
         logging_group = parser.add_argument_group('logging')
         logging_group.add_argument('-t', '--timestamp', help="prefix each message with a timestamp", default=False, action='store_true')
@@ -1847,14 +1848,15 @@ def main():
                     Local(local_folder, local_path) as local,
                     Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote
                 ):
-                    storage = Storage(local_path, args.server_name)
-                    if args.unidirectional_inward:
-                        sync = UnidirectionalInwardSync(local, remote, storage, keyboard_interrupt)
-                    elif args.unidirectional_outward:
-                        sync = UnidirectionalOutwardSync(local, remote, storage, keyboard_interrupt)
-                    else:
-                        sync = BidirectionalSync(local, remote, storage, keyboard_interrupt)
-                    sync.run()
+                    if not args.noop:
+                        storage = Storage(local_path, args.server_name)
+                        if args.unidirectional_inward:
+                            sync = UnidirectionalInwardSync(local, remote, storage, keyboard_interrupt)
+                        elif args.unidirectional_outward:
+                            sync = UnidirectionalOutwardSync(local, remote, storage, keyboard_interrupt)
+                        else:
+                            sync = BidirectionalSync(local, remote, storage, keyboard_interrupt)
+                        sync.run()
 
     except Exception as e:
         logger.exception_or_error(e)

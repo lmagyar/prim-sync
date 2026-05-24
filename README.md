@@ -305,10 +305,9 @@ prim-sync your-phone-pftpd id_ed25519_sftp -t -sh -rs "/fs/storage/emulated/0" -
 ### Options
 
 ```
-usage: prim-sync [-h] [-a host port] [-ui | -uo] [-d] [-D] [-rs PATH] [--overwrite-destination] [--folder-symlink-as-destination] [--ignore-locks [MINUTES]] [-t] [-s] [-ss] [-sh] [--debug] [-M] [-C] [-H]
-                 [-f PATTERN [PATTERN ...]] [-i PATTERN [PATTERN ...]] [-in PATTERN [PATTERN ...]]
-                 [-lf PATTERN [PATTERN ...]] [-li PATTERN [PATTERN ...]] [-lin PATTERN [PATTERN ...]] [-rf PATTERN [PATTERN ...]] [-ri PATTERN [PATTERN ...]] [-rin PATTERN [PATTERN ...]]
-                 [-n | -o] [-cod | -doc] [-l [PATTERN ...]] [-r [PATTERN ...]] [-cl] [-cr] [-m [PATTERN ...]]
+usage: prim-sync [-h] [-a host port] [-ui | -uo] [-d] [-D] [-rs PATH] [--overwrite-destination] [--folder-symlink-as-destination] [--ignore-locks [MINUTES]] [--noop] [-t] [-s] [-ss] [-sh] [--debug]
+                 [-M] [-C] [-H] [-f PATTERN [PATTERN ...]] [-i PATTERN [PATTERN ...]] [-in PATTERN [PATTERN ...]] [-lf PATTERN [PATTERN ...]] [-li PATTERN [PATTERN ...]] [-lin PATTERN [PATTERN ...]]
+                 [-rf PATTERN [PATTERN ...]] [-ri PATTERN [PATTERN ...]] [-rin PATTERN [PATTERN ...]] [-n | -o] [-cod | -doc] [-l [PATTERN ...]] [-r [PATTERN ...]] [-cl] [-cr] [-m [PATTERN ...]]
                  server-name keyfile local-prefix remote-read-prefix remote-write-prefix local-folder remote-folder
 
 Bidirectional and unidirectional sync over SFTP. Multiplatform Python script optimized for the Primitive FTPd Android SFTP server (https://github.com/wolpi/prim-ftpd), for more details see https://github.com/lmagyar/prim-sync
@@ -335,6 +334,7 @@ options:
   --overwrite-destination            don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot when used with bidirectional sync
   --folder-symlink-as-destination    enables writing and deleting symlinked folders and files in them on the local side - it can make sense, but you will definitely shoot yourself in the foot
   --ignore-locks [MINUTES]           ignore locks left over from previous run, optionally only if they are older than MINUTES minutes
+  --noop                             no-operation, will connect but won't even scan the files - can be used to delete stale locks
 
 logging:
   -t, --timestamp                    prefix each message with a timestamp

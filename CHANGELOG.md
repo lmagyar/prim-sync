@@ -2,6 +2,7 @@
 
 ## 0.10.0
 
+- Add --noop option
 - Win: Suppress asyncio transport \_\_del\_\_ exceptions (ValueError from closed pipes) during interpreter shutdown
 - Protect against Ctrl-C/KeyboardInterrupt in critical steps
 - Don't print microseonds in the log
