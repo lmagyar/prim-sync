@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Fix sonarqube issues
+
 ## 0.10.0
 
 - Add --noop option
