@@ -258,7 +258,7 @@ class SignalFence():
         if self.on_deferred_signal is not None:
             try:
                 self.on_deferred_signal(signum, frame)
-            except:
+            except: # NOSONAR(S5754)
                 pass
 
     def disable(self) -> None:
@@ -277,11 +277,11 @@ class SignalFence():
                 self.deferred_signal = None
                 logger.debug("Handling deferred signal %d", self.signum)
                 if isinstance(self.original_handler, signal.Handlers):
-                    if self.original_handler is signal.Handlers.SIG_IGN:
-                        pass
-                    elif self.original_handler is signal.Handlers.SIG_DFL:
+                    if self.original_handler == signal.Handlers.SIG_DFL:
                         signal.signal(self.signum, signal.SIG_DFL)
                         os.kill(os.getpid(), self.signum)
+                    # elif self.original_handler == signal.Handlers.SIG_IGN:
+                    #     pass
                 elif callable(self.original_handler):
                     self.original_handler(*deferred_signal)
 
@@ -386,12 +386,12 @@ class Local:
             raise RuntimeError("Local.scandir() has to be called before has_unsupported_folder_symlink can be accessed")
         return self._has_unsupported_folder_symlink
 
-    def scandir(self, is_destination: bool):
+    def scandir(self, is_destination: bool): # NOSONAR(S3776)
         def _scandir(path: PurePosixPath):
             logger.debug("Scanning local %s", str(self.local_path / path))
             while True: # recovery
                 entries = {e.name: e for e in os.scandir(self.local_path / path)}
-                oldtmpnew_entries = list([e for e in entries.keys() if e.endswith(OLD_FILE_SUFFIX) or e.endswith(TMP_FILE_SUFFIX) or e.endswith(NEW_FILE_SUFFIX)])
+                oldtmpnew_entries = [e for e in entries.keys() if e.endswith(OLD_FILE_SUFFIX) or e.endswith(TMP_FILE_SUFFIX) or e.endswith(NEW_FILE_SUFFIX)]
                 if not oldtmpnew_entries:
                     break
                 oldtmpnew_entry = oldtmpnew_entries[0] # do it one-by-one (there shouldn't be more) and reread the real timestamps from the os
@@ -451,7 +451,7 @@ class Local:
         self._has_unsupported_folder_symlink = False
         yield from _scandir(PurePosixPath(''))
 
-    def remove(self, relative_path: str, fileinfo: FileInfo | None):
+    def remove(self, relative_path: str, fileinfo: FileInfo | None): # NOSONAR(S3776)
         def _rmdir(full_path: str):
             try:
                 os.rmdir(full_path)
@@ -502,7 +502,7 @@ class Local:
     def stat(self, relative_path: str):
         return os.stat(self.local_path / relative_path, follow_symlinks=True)
 
-    def download(self, relative_path: str, rename: bool, remote_open_fn, remote_stat_fn, local_fileinfo: LocalFileInfo | None, remote_fileinfo: FileInfo):
+    def download(self, relative_path: str, rename: bool, remote_open_fn, remote_stat_fn, local_fileinfo: LocalFileInfo | None, remote_fileinfo: FileInfo): # NOSONAR(S3776)
         def _copy(to_full_path: str):
             with (
                 remote_open_fn(relative_path) as remote_file,
@@ -637,12 +637,12 @@ class Remote:
             raise RuntimeError("Local.scandir() has to be called before timezone_offset_measurement_mtime can be accessed")
         return self._timezone_offset_measurement_mtime
 
-    def scandir(self):
+    def scandir(self): # NOSONAR(S3776)
         def _scandir(path: PurePosixPath):
             logger.info_scanning("Scanning    %s", str(self.local_folder / path))
             while True: # recovery
                 entries = {e.filename: e for e in self.sftp.listdir_attr(str(self.remote_read_path / path))}
-                oldtmpnew_entries = list([e for e in entries.keys() if e.endswith(OLD_FILE_SUFFIX) or e.endswith(TMP_FILE_SUFFIX) or e.endswith(NEW_FILE_SUFFIX)])
+                oldtmpnew_entries = [e for e in entries.keys() if e.endswith(OLD_FILE_SUFFIX) or e.endswith(TMP_FILE_SUFFIX) or e.endswith(NEW_FILE_SUFFIX)]
                 if not oldtmpnew_entries:
                     break
                 oldtmpnew_entry = oldtmpnew_entries[0] # do it one-by-one (there shouldn't be more) and reread the real timestamps from the os
@@ -684,7 +684,7 @@ class Remote:
         self._timezone_offset_measurement_mtime = datetime.fromtimestamp(self.sftp.stat(str(self.remote_read_path / STATE_DIR_NAME / TIMEZONE_OFFSET_MEASUREMENT_FILE_NAME)).st_mtime or 0, timezone.utc)
         yield from _scandir(PurePosixPath(''))
 
-    def remove(self, relative_path: str, fileinfo: FileInfo | None):
+    def remove(self, relative_path: str, fileinfo: FileInfo | None): # NOSONAR(S3776)
         def _rmdir(full_path: str):
             try:
                 self.sftp.rmdir(full_path)
@@ -735,7 +735,7 @@ class Remote:
     def stat(self, relative_path: str):
         return self.sftp.stat(str(self.remote_read_path / relative_path))
 
-    def upload(self, local_open_fn, local_stat_fn, relative_path: str, rename: bool, local_fileinfo: FileInfo, remote_fileinfo: FileInfo | None):
+    def upload(self, local_open_fn, local_stat_fn, relative_path: str, rename: bool, local_fileinfo: FileInfo, remote_fileinfo: FileInfo | None): # NOSONAR(S3776)
         def _copy(to_full_path: str):
             with (
                 local_open_fn(relative_path) as local_file,
@@ -802,10 +802,9 @@ class Remote:
         try:
             self.sftp.mkdir(full_path)
         except IOError as e: # FileExistsError
-            if e.errno == None and e.strerror == None and len(e.args) == 1 and e.args[0] == full_path:
-                pass
-            else:
-                raise
+            if e.errno is None and e.strerror is None and len(e.args) == 1 and e.args[0] == full_path:
+                return
+            raise
 
     def _lock_file_name(self):
         def _remove_first_slash(path: str):
@@ -818,7 +817,7 @@ class Remote:
             lock_file_name = lock_folder / _remove_first_slash(str(self.remote_write_path) + LOCK_FILE_SUFFIX).replace('/', '#')
             return (str(lock_folder), str(lock_file_name))
 
-    def _lock_and_initialize(self):
+    def _lock_and_initialize(self): # NOSONAR(S3776)
         def _get_stat(file_name: str):
             try:
                 logger.debug("SFTP stat on %s", file_name)
@@ -850,8 +849,8 @@ class Remote:
                     logger.debug("SFTP mkdir on %s", path)
                     self.sftp.mkdir(path)
                 except IOError as e: # FileExistsError
-                    if e.errno == None and e.strerror == None and len(e.args) == 1 and e.args[0] == path:
-                        pass
+                    if e.errno is None and e.strerror is None and len(e.args) == 1 and e.args[0] == path:
+                        return
                     else:
                         raise
         def _test_state_folder(path: str):
@@ -954,7 +953,7 @@ class Storage:
             with open(self.state_filename, "rb") as in_file:
                 return cast(State, Storage.Unpickler(in_file).load())
         else:
-            return State(dict(), dict(), None)
+            return State({}, {}, None)
 
 class Sync:
     def __init__(self, local: Local, remote: Remote, storage: Storage, keyboard_interrupt: SignalFence):
@@ -963,7 +962,7 @@ class Sync:
         self.storage = storage
         self.keyboard_interrupt = keyboard_interrupt
 
-    def _is_identical(self, relative_path: str, use_compare_for_content_comparison: bool = True):
+    def _is_identical(self, relative_path: str, use_compare_for_content_comparison: bool = True): # NOSONAR(S3776)
         def __is_identical():
             def _compare_or_hash_files():
                 def _compare_files():
@@ -991,7 +990,7 @@ class Sync:
                         remote_file = self.remote.open(relative_path)
                         return remote_file.check('sha256', 0, 0, 0)
                     logger.info_scanning("Hashing     %s/%s", self.local.local_folder, relative_path)
-                    # TODO Do it parallel
+                    # TODO Do it parallel, though remote will always be the bottleneck
                     return _hash_local_file() == _hash_remote_file()
                 if options.use_hash_for_content_comparison:
                     return _hash_files()
@@ -1023,7 +1022,7 @@ class Sync:
         self.remote_previous = previous_state.remote
         self.remote_timezone_mtime_previous = previous_state.remote_timezone_mtime
 
-    def collect(self):
+    def collect(self): # NOSONAR(S3776)
         def _new_entries(current: dict, previous: dict):
             return {k for k in current.keys() if k not in previous}
         def _deleted_entries(current: dict, previous: dict):
@@ -1090,7 +1089,7 @@ class Sync:
         self.upload = set()
         self.download_with_rename = set()
         self.upload_with_rename = set()
-        self.conflict = dict()
+        self.conflict = {}
 
         self.local_tracking = dict(self.local_previous)
         self.remote_tracking = dict(self.remote_previous)
@@ -1099,7 +1098,7 @@ class Sync:
     def compare(self):
         logger.info_header("----------- Analyzing")
 
-    def execute(self):
+    def execute(self): # NOSONAR(S3776)
         def _filesize_fmt(num, suffix="B"):
             for unit in ("", "k", "M", "G"):
                 if abs(num) < 1024.0:
@@ -1186,13 +1185,13 @@ class Sync:
                         self.local_tracking[relative_path] = local_fileinfo
 
         for relative_path, reason in sorted(self.conflict.items(), key=lambda p: (p.count('/'), p)):
-            def _extended_reason():
+            def _extended_reason(relative_path, reason):
                 def _extended_reason_compare(left_fileinfo: FileInfo, right_fileinfo: FileInfo):
                     return (
                         f", size: {_filesize_fmt(left_fileinfo.size)} ({format(left_fileinfo.size, ',d').replace(',',' ')}) "
-                            f"{'>' if left_fileinfo.size > right_fileinfo.size else '<' if left_fileinfo.size < right_fileinfo.size else '='} "
+                            f"{'>' if left_fileinfo.size > right_fileinfo.size else '<' if left_fileinfo.size < right_fileinfo.size else '='} " #NOSONAR(S3358)
                             f"{_filesize_fmt(right_fileinfo.size)} ({format(right_fileinfo.size, ',d').replace(',',' ')})"
-                        f", time: {left_fileinfo.mtime.replace(microsecond=0).astimezone()} {'>' if left_fileinfo.mtime > right_fileinfo.mtime else '<' if left_fileinfo.mtime < right_fileinfo.mtime else '='} {right_fileinfo.mtime.replace(microsecond=0).astimezone()}")
+                        f", time: {left_fileinfo.mtime.replace(microsecond=0).astimezone()} {'>' if left_fileinfo.mtime > right_fileinfo.mtime else '<' if left_fileinfo.mtime < right_fileinfo.mtime else '='} {right_fileinfo.mtime.replace(microsecond=0).astimezone()}") #NOSONAR(S3358)
                 extended_reason = f"              {reason}"
                 local_fileinfo = self.local_current.get(relative_path)
                 remote_fileinfo = self.remote_current.get(relative_path)
@@ -1211,7 +1210,7 @@ class Sync:
                         extended_reason += f", size: {_filesize_fmt(fileinfo.size)} ({format(fileinfo.size, ',d').replace(',',' ')}), time: {fileinfo.mtime.replace(microsecond=0).astimezone()}"
                 return extended_reason
             logger.warning("<<< !!! >>> %s/%s", self.local.local_folder, relative_path)
-            logger.warning(LazyStr(_extended_reason))
+            logger.warning(LazyStr(_extended_reason, relative_path, reason))
 
         if not self.delete_local and not self.delete_remote and not self.download and not self.upload and not self.download_with_rename and not self.upload_with_rename and not self.conflict:
             logger.info_header("----------- Everything is up to date!")
@@ -1233,6 +1232,30 @@ class Sync:
                 logger.debug("Remote tracking count: %d, Remote current count: %d", len(self.remote_tracking), len(self.remote_current))
                 self.keyboard_interrupt.disable()
                 self.save()
+
+CONFLICT_CHANGED_LOCALLY_DELETED_REMOTELY = "is changed locally but also deleted remotely"
+CONFLICT_NEW_LOCALLY_DELETED_REMOTELY =  "is new locally but deleted remotely"
+CONFLICT_DELETED_LOCALLY_CHANGED_REMOTELY =  "is deleted locally but also changed remotely"
+CONFLICT_DELETED_LOCALLY_NEW_REMOTELY =  "is deleted locally but new remotely"
+
+CONFLICT_UNCHANGED_LOCALLY_NEW_REMOTELY_AND_DIFFERENT = "is unchanged locally but new remotely and they are different"
+CONFLICT_NEW_LOCALLY_UNCHANGED_REMOTELY_AND_DIFFERENT = "is new locally but unchanged remotely and they are different"
+CONFLICT_CHANGED_LOCALLY_AND_REMOTELY_AND_DIFFERENT = "is changed locally and remotely and they are different"
+CONFLICT_NEW_LOCALLY_AND_REMOTELY_AND_DIFFERENT = "is new locally and remotely but they are different"
+CONFLICT_CHANGED_LOCALLY_NEW_REMOTELY_AND_DIFFERENT = "is changed locally but new remotely and they are different"
+CONFLICT_NEW_LOCALLY_CHANGED_REMOTELY_AND_DIFFERENT = "is new locally but changed remotely and they are different"
+
+CONFLICT_CHANGED_LOCALLY_UNKNOWN_REMOTELY = "is changed locally but unknown remotely"
+CONFLICT_NEW_LOCALLY_UNKNOWN_REMOTELY = "is new locally but unknown remotely"
+CONFLICT_UNCHANGED_LOCALLY_UNKNOWN_REMOTELY = "unchanged locally but is unknown remotely"
+CONFLICT_DELETED_LOCALLY_EXISTS_REMOTELY = "is deleted locally but exists remotely"
+CONFLICT_CHANGED_LOCALLY_UNCHANGED_REMOTELY = "is changed locally but unchanged remotely"
+
+CONFLICT_UNKNOWN_LOCALLY_CHANGED_REMOTELY = "is unknown locally but also changed remotely"
+CONFLICT_UNKNOWN_LOCALLY_NEW_REMOTELY = "is unknown locally but new remotely"
+CONFLICT_UNKNOWN_LOCALLY_UNCHANGED_REMOTELY = "is unknown locally but unchanged remotely"
+CONFLICT_EXISTS_LOCALLY_DELETED_REMOTELY = "exists locally but is deleted remotely"
+CONFLICT_UNCHANGED_LOCALLY_CHANGED_REMOTELY = "is unchanged locally but changed remotely"
 
 # Bidirectional comparison
 #
@@ -1268,7 +1291,7 @@ class BidirectionalSync(Sync):
     def is_local_destination(self) -> bool:
         return True
 
-    def _resolve(self, relative_path: str):
+    def _resolve(self, relative_path: str): # NOSONAR(S3776)
         if ((options.newer_wins or options.older_wins) and not relative_path.endswith('/')
                 and (local_mtime := cast(FileInfo, self.local_current[relative_path]).mtime) != (remote_mtime := cast(FileInfo, self.remote_current[relative_path]).mtime)):
             if local_mtime > remote_mtime and options.newer_wins or local_mtime < remote_mtime and options.older_wins:
@@ -1311,7 +1334,7 @@ class BidirectionalSync(Sync):
             return False
         return True
 
-    def compare(self):
+    def compare(self): # NOSONAR(S3776)
         super().compare()
 
         for p in self.remote_deleted:
@@ -1323,61 +1346,49 @@ class BidirectionalSync(Sync):
                 self.delete_remote.add(p)
 
         for p in self.remote_changed:
-            if p in self.local_unchanged:
-                if not self._is_identical(p, use_compare_for_content_comparison=False):
-                    self.download.add(p)
+            if p in self.local_unchanged and not self._is_identical(p, use_compare_for_content_comparison=False):
+                self.download.add(p)
         for p in self.remote_current:
             if p not in self.local_current and p not in self.local_deleted:
                 self.download.add(p)
 
         for p in self.local_changed:
-            if p in self.remote_unchanged:
-                if not self._is_identical(p, use_compare_for_content_comparison=False):
-                    self.upload.add(p)
+            if p in self.remote_unchanged and not self._is_identical(p, use_compare_for_content_comparison=False):
+                self.upload.add(p)
         for p in self.local_current:
             if p not in self.remote_current and p not in self.remote_deleted:
                 self.upload.add(p)
 
         for p in self.remote_deleted:
-            if p in self.local_changed:
-                if not self._resolve_remote_deleted(p):
-                    self.conflict[p] = "is changed locally but also deleted remotely"
-            if p in self.local_new:
-                if not self._resolve_remote_deleted(p):
-                    self.conflict[p] = "is new locally but deleted remotely"
+            if p in self.local_changed and not self._resolve_remote_deleted(p):
+                self.conflict[p] = CONFLICT_CHANGED_LOCALLY_DELETED_REMOTELY
+            if p in self.local_new and not self._resolve_remote_deleted(p):
+                self.conflict[p] = CONFLICT_NEW_LOCALLY_DELETED_REMOTELY
 
         for p in self.local_deleted:
-            if p in self.remote_changed:
-                if not self._resolve_local_deleted(p):
-                    self.conflict[p] = "is deleted locally but also changed remotely"
-            if p in self.local_new:
-                if not self._resolve_local_deleted(p):
-                    self.conflict[p] = "is deleted locally but new remotely"
+            if p in self.remote_changed and not self._resolve_local_deleted(p):
+                self.conflict[p] = CONFLICT_DELETED_LOCALLY_CHANGED_REMOTELY
+            if p in self.local_new and not self._resolve_local_deleted(p):
+                self.conflict[p] = CONFLICT_DELETED_LOCALLY_NEW_REMOTELY
 
         for p in self.remote_new:
-            if p in self.local_unchanged:
-                if not self._is_identical(p) and not self._resolve(p):
-                    self.conflict[p] = "is unchanged locally but new remotely and they are different"
+            if p in self.local_unchanged and not self._is_identical(p) and not self._resolve(p):
+                self.conflict[p] = CONFLICT_UNCHANGED_LOCALLY_NEW_REMOTELY_AND_DIFFERENT
         for p in self.local_new:
-            if p in self.remote_unchanged:
-                if not self._is_identical(p) and not self._resolve(p):
-                    self.conflict[p] = "is new locally but unchanged remotely and they are different"
+            if p in self.remote_unchanged and not self._is_identical(p) and not self._resolve(p):
+                self.conflict[p] = CONFLICT_NEW_LOCALLY_UNCHANGED_REMOTELY_AND_DIFFERENT
         for p in self.local_changed:
-            if p in self.remote_changed:
-                if not self._is_identical(p) and not self._resolve(p):
-                    self.conflict[p] = "is changed locally and remotely and they are different"
+            if p in self.remote_changed and not self._is_identical(p) and not self._resolve(p):
+                self.conflict[p] = CONFLICT_CHANGED_LOCALLY_AND_REMOTELY_AND_DIFFERENT
         for p in self.local_new:
-            if p in self.remote_new:
-                if not self._is_identical(p) and not self._resolve(p):
-                    self.conflict[p] = "is new locally and remotely but they are different"
+            if p in self.remote_new and not self._is_identical(p) and not self._resolve(p):
+                self.conflict[p] = CONFLICT_NEW_LOCALLY_AND_REMOTELY_AND_DIFFERENT
         for p in self.local_changed:
-            if p in self.remote_new:
-                if not self._is_identical(p) and not self._resolve(p):
-                    self.conflict[p] = "is changed locally but new remotely and they are different"
+            if p in self.remote_new and not self._is_identical(p) and not self._resolve(p):
+                self.conflict[p] = CONFLICT_CHANGED_LOCALLY_NEW_REMOTELY_AND_DIFFERENT
         for p in self.local_new:
-            if p in self.remote_changed:
-                if not self._is_identical(p) and not self._resolve(p):
-                    self.conflict[p] = "is new locally but changed remotely and they are different"
+            if p in self.remote_changed and not self._is_identical(p) and not self._resolve(p):
+                self.conflict[p] = CONFLICT_NEW_LOCALLY_CHANGED_REMOTELY_AND_DIFFERENT
 
 # Unidirectional inward (<-) comparison
 #
@@ -1426,7 +1437,7 @@ class UnidirectionalInwardSync(Sync):
             return False
         return True
 
-    def compare(self):
+    def compare(self): # NOSONAR(S3776)
         super().compare()
 
         for p in self.remote_deleted:
@@ -1434,65 +1445,53 @@ class UnidirectionalInwardSync(Sync):
                 self.delete_local.add(p)
 
         for p in self.remote_changed:
-            if p in self.local_unchanged:
-                if not self._is_identical(p, use_compare_for_content_comparison=False):
-                    self.download.add(p)
+            if p in self.local_unchanged and not self._is_identical(p, use_compare_for_content_comparison=False):
+                self.download.add(p)
         for p in self.remote_current:
             if p not in self.local_current and p not in self.local_deleted:
                 self.download.add(p)
 
         for p in self.local_changed:
-            if p not in self.remote_current:
-                if not self._resolve_local_deletion(p):
-                    if p in self.remote_deleted:
-                        self.conflict[p] = "is changed locally but also deleted remotely" # existing text
-                    else:
-                        self.conflict[p] = "is changed locally but unknown remotely"
+            if p not in self.remote_current and not self._resolve_local_deletion(p):
+                if p in self.remote_deleted:
+                    self.conflict[p] = CONFLICT_CHANGED_LOCALLY_DELETED_REMOTELY
+                else:
+                    self.conflict[p] = CONFLICT_CHANGED_LOCALLY_UNKNOWN_REMOTELY
         for p in self.local_new:
-            if p not in self.remote_current:
-                if not self._resolve_local_deletion(p):
-                    if p in self.remote_deleted:
-                        self.conflict[p] = "is new locally but deleted remotely" # existing text
-                    else:
-                        self.conflict[p] = "is new locally but unknown remotely"
+            if p not in self.remote_current and not self._resolve_local_deletion(p):
+                if p in self.remote_deleted:
+                    self.conflict[p] = CONFLICT_NEW_LOCALLY_DELETED_REMOTELY
+                else:
+                    self.conflict[p] = CONFLICT_NEW_LOCALLY_UNKNOWN_REMOTELY
         for p in self.local_unchanged:
-            if p not in self.remote_current and p not in self.remote_deleted:
-                if not self._resolve_local_deletion(p):
-                    self.conflict[p] = "unchanged locally but is unknown remotely"
+            if p not in self.remote_current and p not in self.remote_deleted and not self._resolve_local_deletion(p):
+                self.conflict[p] = CONFLICT_UNCHANGED_LOCALLY_UNKNOWN_REMOTELY
 
         for p in self.local_deleted:
-            if p in self.remote_current:
-                if not self._resolve_download(p):
-                    self.conflict[p] = "is deleted locally but exists remotely"
+            if p in self.remote_current and not self._resolve_download(p):
+                self.conflict[p] = CONFLICT_DELETED_LOCALLY_EXISTS_REMOTELY
         for p in self.local_changed:
-            if p in self.remote_unchanged:
-                if not self._is_identical(p, use_compare_for_content_comparison=False) and not self._resolve_download(p):
-                    self.conflict[p] = "is changed locally but unchanged remotely"
+            if p in self.remote_unchanged and not self._is_identical(p, use_compare_for_content_comparison=False) and not self._resolve_download(p):
+                self.conflict[p] = CONFLICT_CHANGED_LOCALLY_UNCHANGED_REMOTELY
 
         for p in self.remote_new:
-            if p in self.local_unchanged:
-                if not self._is_identical(p) and not self._resolve_download(p):
-                    self.conflict[p] = "is unchanged locally but new remotely and they are different" # existing text
+            if p in self.local_unchanged and not self._is_identical(p) and not self._resolve_download(p):
+                self.conflict[p] = CONFLICT_UNCHANGED_LOCALLY_NEW_REMOTELY_AND_DIFFERENT
         for p in self.local_new:
-            if p in self.remote_unchanged:
-                if not self._is_identical(p) and not self._resolve_download(p):
-                    self.conflict[p] = "is new locally but unchanged remotely and they are different" # existing text
+            if p in self.remote_unchanged and not self._is_identical(p) and not self._resolve_download(p):
+                self.conflict[p] = CONFLICT_NEW_LOCALLY_UNCHANGED_REMOTELY_AND_DIFFERENT
         for p in self.local_changed:
-            if p in self.remote_changed:
-                if not self._is_identical(p) and not self._resolve_download(p):
-                    self.conflict[p] = "is changed locally and remotely and they are different" # existing text
+            if p in self.remote_changed and not self._is_identical(p) and not self._resolve_download(p):
+                self.conflict[p] = CONFLICT_CHANGED_LOCALLY_AND_REMOTELY_AND_DIFFERENT
         for p in self.local_new:
-            if p in self.remote_new:
-                if not self._is_identical(p) and not self._resolve_download(p):
-                    self.conflict[p] = "is new locally and remotely but they are different" # existing text
+            if p in self.remote_new and not self._is_identical(p) and not self._resolve_download(p):
+                self.conflict[p] = CONFLICT_NEW_LOCALLY_AND_REMOTELY_AND_DIFFERENT
         for p in self.local_changed:
-            if p in self.remote_new:
-                if not self._is_identical(p) and not self._resolve_download(p):
-                    self.conflict[p] = "is changed locally but new remotely and they are different" # existing text
+            if p in self.remote_new and not self._is_identical(p) and not self._resolve_download(p):
+                self.conflict[p] = CONFLICT_CHANGED_LOCALLY_NEW_REMOTELY_AND_DIFFERENT
         for p in self.local_new:
-            if p in self.remote_changed:
-                if not self._is_identical(p) and not self._resolve_download(p):
-                    self.conflict[p] = "is new locally but changed remotely and they are different" # existing text
+            if p in self.remote_changed and not self._is_identical(p) and not self._resolve_download(p):
+                self.conflict[p] = CONFLICT_NEW_LOCALLY_CHANGED_REMOTELY_AND_DIFFERENT
 
 # Unidirectional outward (->) comparison
 #
@@ -1541,7 +1540,7 @@ class UnidirectionalOutwardSync(Sync):
             return False
         return True
 
-    def compare(self):
+    def compare(self): # NOSONAR(S3776)
         super().compare()
 
         for p in self.local_deleted:
@@ -1549,65 +1548,53 @@ class UnidirectionalOutwardSync(Sync):
                 self.delete_remote.add(p)
 
         for p in self.local_changed:
-            if p in self.remote_unchanged:
-                if not self._is_identical(p, use_compare_for_content_comparison=False):
-                    self.upload.add(p)
+            if p in self.remote_unchanged and not self._is_identical(p, use_compare_for_content_comparison=False):
+                self.upload.add(p)
         for p in self.local_current:
             if p not in self.remote_current and p not in self.remote_deleted:
                 self.upload.add(p)
 
         for p in self.remote_changed:
-            if p not in self.local_current:
-                if not self._resolve_remote_deletion(p):
-                    if p in self.local_deleted:
-                        self.conflict[p] = "is deleted locally but also changed remotely" # existing text
-                    else:
-                        self.conflict[p] = "is unknown locally but also changed remotely"
+            if p not in self.local_current and not self._resolve_remote_deletion(p):
+                if p in self.local_deleted:
+                    self.conflict[p] = CONFLICT_DELETED_LOCALLY_CHANGED_REMOTELY
+                else:
+                    self.conflict[p] = CONFLICT_UNKNOWN_LOCALLY_CHANGED_REMOTELY
         for p in self.remote_new:
-            if p not in self.local_current:
-                if not self._resolve_remote_deletion(p):
-                    if p in self.local_deleted:
-                        self.conflict[p] = "is deleted locally but new remotely" # existing text
-                    else:
-                        self.conflict[p] = "is unknown locally but new remotely"
+            if p not in self.local_current and not self._resolve_remote_deletion(p):
+                if p in self.local_deleted:
+                    self.conflict[p] = CONFLICT_DELETED_LOCALLY_NEW_REMOTELY
+                else:
+                    self.conflict[p] = CONFLICT_UNKNOWN_LOCALLY_NEW_REMOTELY
         for p in self.remote_unchanged:
-            if p not in self.local_current and p not in self.local_deleted:
-                if not self._resolve_remote_deletion(p):
-                    self.conflict[p] = "is unknown locally but unchanged remotely"
+            if p not in self.local_current and p not in self.local_deleted and not self._resolve_remote_deletion(p):
+                self.conflict[p] = CONFLICT_UNKNOWN_LOCALLY_UNCHANGED_REMOTELY
 
         for p in self.remote_deleted:
-            if p in self.local_current:
-                if not self._resolve_upload(p):
-                    self.conflict[p] = "exists locally but is deleted remotely"
+            if p in self.local_current and not self._resolve_upload(p):
+                self.conflict[p] = CONFLICT_EXISTS_LOCALLY_DELETED_REMOTELY
         for p in self.remote_changed:
-            if p in self.local_unchanged:
-                if not self._is_identical(p, use_compare_for_content_comparison=False) and not self._resolve_upload(p):
-                    self.conflict[p] = "is unchanged locally but changed remotely"
+            if p in self.local_unchanged and not self._is_identical(p, use_compare_for_content_comparison=False) and not self._resolve_upload(p):
+                self.conflict[p] = CONFLICT_UNCHANGED_LOCALLY_CHANGED_REMOTELY
 
         for p in self.remote_new:
-            if p in self.local_unchanged:
-                if not self._is_identical(p) and not self._resolve_upload(p):
-                    self.conflict[p] = "is unchanged locally but new remotely and they are different" # existing text
+            if p in self.local_unchanged and not self._is_identical(p) and not self._resolve_upload(p):
+                self.conflict[p] = CONFLICT_UNCHANGED_LOCALLY_NEW_REMOTELY_AND_DIFFERENT
         for p in self.local_new:
-            if p in self.remote_unchanged:
-                if not self._is_identical(p) and not self._resolve_upload(p):
-                    self.conflict[p] = "is new locally but unchanged remotely and they are different" # existing text
+            if p in self.remote_unchanged and not self._is_identical(p) and not self._resolve_upload(p):
+                self.conflict[p] = CONFLICT_NEW_LOCALLY_UNCHANGED_REMOTELY_AND_DIFFERENT
         for p in self.local_changed:
-            if p in self.remote_changed:
-                if not self._is_identical(p) and not self._resolve_upload(p):
-                    self.conflict[p] = "is changed locally and remotely and they are different" # existing text
+            if p in self.remote_changed and not self._is_identical(p) and not self._resolve_upload(p):
+                self.conflict[p] = CONFLICT_CHANGED_LOCALLY_AND_REMOTELY_AND_DIFFERENT
         for p in self.local_new:
-            if p in self.remote_new:
-                if not self._is_identical(p) and not self._resolve_upload(p):
-                    self.conflict[p] = "is new locally and remotely but they are different" # existing text
+            if p in self.remote_new and not self._is_identical(p) and not self._resolve_upload(p):
+                self.conflict[p] = CONFLICT_NEW_LOCALLY_AND_REMOTELY_AND_DIFFERENT
         for p in self.local_changed:
-            if p in self.remote_new:
-                if not self._is_identical(p) and not self._resolve_upload(p):
-                    self.conflict[p] = "is changed locally but new remotely and they are different" # existing text
+            if p in self.remote_new and not self._is_identical(p) and not self._resolve_upload(p):
+                self.conflict[p] = CONFLICT_CHANGED_LOCALLY_NEW_REMOTELY_AND_DIFFERENT
         for p in self.local_new:
-            if p in self.remote_changed:
-                if not self._is_identical(p) and not self._resolve_upload(p):
-                    self.conflict[p] = "is new locally but changed remotely and they are different" # existing text
+            if p in self.remote_changed and not self._is_identical(p) and not self._resolve_upload(p):
+                self.conflict[p] = CONFLICT_NEW_LOCALLY_CHANGED_REMOTELY_AND_DIFFERENT
 
 ########
 
@@ -1682,7 +1669,7 @@ class WideHelpFormatter(argparse.RawTextHelpFormatter):
     def __init__(self, prog: str, indent_increment: int = 2, max_help_position: int = 37, width: int | None = None) -> None:
         super().__init__(prog, indent_increment, max_help_position, width)
 
-def main():
+def main(): # NOSONAR(S3776)
     args = None
     try:
         parser = argparse.ArgumentParser(
