@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.10.0
+
+- Add --noop option
+- Win: Suppress asyncio transport \_\_del\_\_ exceptions (ValueError from closed pipes) during interpreter shutdown
+- Protect against Ctrl-C/KeyboardInterrupt in critical steps
+- Don't print microseonds in the log
+- Ctrl-C/KeyboardInterrupt results in exit code 130
+- Copy-to-local/remote adds original file's timestamp also to the copied filename
+- Use local timezone in log messages
+- Fix: do not hide copy errors
+- Add --filter, --ignore and --ignore-not (local, remote, both) options
+- Track changes during sync and save them on exception
+
 ## 0.9.2
 
 - Skip special prim-sync folders and files in subfolders also

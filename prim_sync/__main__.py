@@ -1,23 +1,25 @@
 
-from abc import abstractmethod
 import argparse
 import hashlib
 import logging
 import os
 import pickle
 import shutil
+import signal
 import socket
 import stat
 import sys
-from contextlib import suppress
+from abc import abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from fnmatch import fnmatch
 from itertools import chain
 from pathlib import Path, PurePath, PurePosixPath
-from typing import Self, cast
+from types import FrameType
+from typing import cast, Callable, Iterator, Optional, Tuple
 
-from paramiko import SSHClient, SFTPClient, MissingHostKeyPolicy, RejectPolicy
+from paramiko import SSHClient, SFTPClient, MissingHostKeyPolicy
 from paramiko.ssh_exception import NoValidConnectionsError, BadHostKeyException, SSHException
 from platformdirs import user_cache_dir
 from zeroconf import Zeroconf
@@ -40,7 +42,7 @@ class LevelFormatter(logging.Formatter):
 
     def __init__(self, fmts: dict[int, str], fmt: str, **kwargs):
         super().__init__()
-        self.formatters = dict({level: logging.Formatter(fmt, **kwargs) for level, fmt in fmts.items()})
+        self.formatters = {level: logging.Formatter(fmt, **kwargs) for level, fmt in fmts.items()}
         self.default_formatter = logging.Formatter(fmt, **kwargs)
 
     def format(self, record: logging.LogRecord) -> str:
@@ -98,11 +100,13 @@ class Logger(logging.Logger):
         super().error(msg, *args, **kwargs)
 
     def critical(self, msg, *args, **kwargs):
-        self.exitcode = 1
+        self.exitcode = 128 + kwargs.pop('signal', 0)
         super().critical(msg, *args, **kwargs)
 
     def log(self, level, msg, *args, **kwargs):
-        if level >= logging.ERROR:
+        if level >= logging.CRITICAL:
+            self.exitcode = 128 + kwargs.pop('signal', 0)
+        elif level >= logging.ERROR:
             self.exitcode = 1
         super().log(level, msg, *args, **kwargs)
 
@@ -129,6 +133,12 @@ class Options:
     use_mtime_for_comparison: bool = True
     use_content_for_comparison: bool = True
     use_hash_for_content_comparison: bool = True
+    local_filter_patterns: set[str] = field(default_factory=set)
+    local_ignore_patterns: set[str] = field(default_factory=set)
+    local_ignore_not_patterns: set[str] = field(default_factory=set)
+    remote_filter_patterns: set[str] = field(default_factory=set)
+    remote_ignore_patterns: set[str] = field(default_factory=set)
+    remote_ignore_not_patterns: set[str] = field(default_factory=set)
     newer_wins: bool = False
     older_wins: bool = False
     change_wins_over_deletion: bool = False
@@ -224,6 +234,73 @@ def set_file_time(full_path, btime: float | None, atime: float | None, mtime: fl
     if not wintypes.BOOL(CloseHandle(handle)):
         raise WinError()
 
+def prefix_or_fnmatch(name: str, pat: str):
+    return pat.startswith(name) or fnmatch(name, pat)
+
+########
+
+# based on https://stackoverflow.com/a/71330357/2755656
+class SignalFence():
+    def __init__(self, signum: signal.Signals, on_deferred_signal: Optional[Callable[[int, Optional[FrameType]], None]] = None):
+        self.signum = signum
+        self.on_deferred_signal = on_deferred_signal
+        self.deferred_signal: Optional[Tuple[int, Optional[FrameType]]] = None
+        self.enabled = True
+        self.original_handler = signal.getsignal(signum)
+        if self.original_handler is None:
+            raise TypeError("signal_fence cannot be used with signal handlers that were not installed from Python")
+        if isinstance(self.original_handler, int) and not isinstance(self.original_handler, signal.Handlers):
+            raise NotImplementedError("Your Python interpreter's signal module is using raw integers to represent SIG_IGN and SIG_DFL, which shouldn't be possible!")
+
+    def _handler(self, signum: int, frame: Optional[FrameType]) -> None:
+        if self.deferred_signal is None:
+            self.deferred_signal = (signum, frame)
+        if self.on_deferred_signal is not None:
+            try:
+                self.on_deferred_signal(signum, frame)
+            except:
+                pass
+
+    def disable(self) -> None:
+        if self.enabled:
+            self.enabled = False
+            self.deferred_signal = None
+            logger.debug("Disabling signal %d", self.signum)
+            signal.signal(self.signum, self._handler)
+
+    def enable(self) -> None:
+        if not self.enabled:
+            self.enabled = True
+            logger.debug("Enabling signal %d", self.signum)
+            signal.signal(self.signum, self.original_handler)
+            if (deferred_signal := self.deferred_signal) is not None:
+                self.deferred_signal = None
+                logger.debug("Handling deferred signal %d", self.signum)
+                if isinstance(self.original_handler, signal.Handlers):
+                    if self.original_handler is signal.Handlers.SIG_IGN:
+                        pass
+                    elif self.original_handler is signal.Handlers.SIG_DFL:
+                        signal.signal(self.signum, signal.SIG_DFL)
+                        os.kill(os.getpid(), self.signum)
+                elif callable(self.original_handler):
+                    self.original_handler(*deferred_signal)
+
+    @contextmanager
+    def protect(self) -> Iterator[SignalFence]:
+        try:
+            self.disable()
+            yield self
+        finally:
+            self.enable()
+
+    @contextmanager
+    def unprotect(self) -> Iterator[SignalFence]:
+        try:
+            self.enable()
+            yield self
+        finally:
+            self.disable()
+
 ########
 
 class FileInfo:
@@ -232,11 +309,14 @@ class FileInfo:
         self.mtime = mtime
     def __repr__(self):
         return f'({self.size}, {self.mtime})'
-    def is_equal_previous(self, previous: Self, time_shift: timedelta | None):
-        if time_shift is not None:
-            return self.size == previous.size and self.mtime == previous.mtime + time_shift
-        else:
-            return self.size == previous.size and self.mtime == previous.mtime
+    def __eq__(self, other):
+        if not isinstance(other, FileInfo):
+            return NotImplemented
+        return self.size == other.size and self.mtime == other.mtime
+    def __ne__(self, other):
+        if not isinstance(other, FileInfo):
+            return NotImplemented
+        return self.size != other.size or self.mtime != other.mtime
 
 class LocalFileInfo(FileInfo):
     def __init__(self, size: int, mtime: datetime, btime: datetime, symlink_target: str | None):
@@ -310,7 +390,7 @@ class Local:
         def _scandir(path: PurePosixPath):
             logger.debug("Scanning local %s", str(self.local_path / path))
             while True: # recovery
-                entries = dict({e.name: e for e in os.scandir(self.local_path / path)})
+                entries = {e.name: e for e in os.scandir(self.local_path / path)}
                 oldtmpnew_entries = list([e for e in entries.keys() if e.endswith(OLD_FILE_SUFFIX) or e.endswith(TMP_FILE_SUFFIX) or e.endswith(NEW_FILE_SUFFIX)])
                 if not oldtmpnew_entries:
                     break
@@ -335,16 +415,22 @@ class Local:
                         os.rename(self.local_path / path / new_entry_name, self.local_path / path / entry_name)
                     os.remove(self.local_path / path / old_entry_name)
             for entry in sorted(entries.values(), key=lambda e: e.name):
-                relative_path = path / entry.name
-                relative_name = str(relative_path)
                 if entry.name == STATE_DIR_NAME or entry.name == LOCK_FILE_NAME or entry.name.endswith(CONFLICT_FILE_SUFFIX):
                     continue
-                if entry.is_dir(follow_symlinks=True):
+                relative_path = path / entry.name
+                relative_name = str(relative_path)
+                if is_dir := entry.is_dir(follow_symlinks=True):
+                    relative_name += '/'
+                if (options.local_filter_patterns and not any(prefix_or_fnmatch(relative_name, p) for p in options.local_filter_patterns)
+                        or options.local_ignore_patterns and any(fnmatch(relative_name, p) for p in options.local_ignore_patterns)
+                            and (not options.local_ignore_not_patterns or not any(fnmatch(relative_name, p) for p in options.local_ignore_not_patterns))):
+                    continue
+                if is_dir:
                     if is_destination and not options.folder_symlink_as_destination:
                         if entry.is_symlink() or entry.is_junction():
                             logger.warning("<<< SYMLINK %s/%s", self.local_folder, relative_name)
                             self._has_unsupported_folder_symlink = True
-                    yield relative_name + '/', None
+                    yield relative_name, None
                     yield from _scandir(relative_path)
                 else:
                     if is_destination and not options.overwrite_destination:
@@ -418,15 +504,11 @@ class Local:
 
     def download(self, relative_path: str, rename: bool, remote_open_fn, remote_stat_fn, local_fileinfo: LocalFileInfo | None, remote_fileinfo: FileInfo):
         def _copy(to_full_path: str):
-            try:
-                with (
-                    remote_open_fn(relative_path) as remote_file,
-                    open(to_full_path, "wb") as local_file
-                ):
-                    shutil.copyfileobj(remote_file, local_file)
-                return True
-            except IOError:
-                return False # any error on any side
+            with (
+                remote_open_fn(relative_path) as remote_file,
+                open(to_full_path, "wb") as local_file
+            ):
+                shutil.copyfileobj(remote_file, local_file)
         def _utime(full_path: str):
             os.utime(full_path, (remote_fileinfo.mtime.timestamp(), remote_fileinfo.mtime.timestamp()), follow_symlinks=True)
         def _set_file_time(full_path: str):
@@ -467,29 +549,29 @@ class Local:
             old_full_path = full_path + OLD_FILE_SUFFIX
             tmp_full_path = full_path + TMP_FILE_SUFFIX
             new_full_path = full_path + NEW_FILE_SUFFIX
-            if _copy(new_full_path):
-                if local_fileinfo and SETFILETIME_SUPPORTED:
-                    _set_file_time(new_full_path)
-                else:
-                    _utime(new_full_path)
-                new_fileinfo = _fileinfo(new_full_path)
-                if local_fileinfo:
-                    if _commitexisting(full_path, tmp_full_path, old_full_path):
-                        os.rename(new_full_path, full_path)
-                        os.remove(old_full_path)
-                        return new_fileinfo
-                else:
-                    if _commitnew(new_full_path, full_path):
-                        return new_fileinfo
+            _copy(new_full_path)
+            if local_fileinfo and SETFILETIME_SUPPORTED:
+                _set_file_time(new_full_path)
+            else:
+                _utime(new_full_path)
+            new_fileinfo = _fileinfo(new_full_path)
+            if local_fileinfo and _commitexisting(full_path, tmp_full_path, old_full_path):
+                os.rename(new_full_path, full_path)
+                os.remove(old_full_path)
+                return new_fileinfo
+            elif not local_fileinfo and _commitnew(new_full_path, full_path):
+                return new_fileinfo
+            else:
+                return None
         elif options.overwrite_destination:
-            if _copy(full_path):
-                _utime(full_path)
-                return _fileinfo(full_path)
+            _copy(full_path)
+            _utime(full_path)
+            return _fileinfo(full_path)
         else: # rename
-            full_path += CONFLICT_FILE_SUFFIX
-            if _copy(full_path):
-                _utime(full_path)
-        return None
+            full_path += remote_fileinfo.mtime.astimezone().strftime(".%Y%m%d-%H%M%S") + CONFLICT_FILE_SUFFIX
+            _copy(full_path)
+            _utime(full_path)
+            return None
 
     def mkdir(self, relative_path: str):
         full_path = str(self.local_path / relative_path)
@@ -524,7 +606,7 @@ class Local:
             if lock_stat is None and options.ignore_locks is None:
                 lock_stat = _get_stat(lock_file_name)
             if lock_stat is not None:
-                e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(lock_stat.st_mtime).replace(microsecond=0)}")
+                e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(lock_stat.st_mtime).replace(microsecond=0).astimezone()}")
             raise
 
     def _unlock(self):
@@ -559,7 +641,7 @@ class Remote:
         def _scandir(path: PurePosixPath):
             logger.info_scanning("Scanning    %s", str(self.local_folder / path))
             while True: # recovery
-                entries = dict({e.filename: e for e in self.sftp.listdir_attr(str(self.remote_read_path / path))})
+                entries = {e.filename: e for e in self.sftp.listdir_attr(str(self.remote_read_path / path))}
                 oldtmpnew_entries = list([e for e in entries.keys() if e.endswith(OLD_FILE_SUFFIX) or e.endswith(TMP_FILE_SUFFIX) or e.endswith(NEW_FILE_SUFFIX)])
                 if not oldtmpnew_entries:
                     break
@@ -584,12 +666,18 @@ class Remote:
                         self.sftp.rename(str(self.remote_write_path / path / new_entry_name), str(self.remote_write_path / path / entry_name))
                     self.sftp.remove(str(self.remote_write_path / path / old_entry_name))
             for entry in sorted(entries.values(), key=lambda e: e.filename):
-                relative_path = path / entry.filename
-                relative_name = str(relative_path)
                 if entry.filename == STATE_DIR_NAME or entry.filename == LOCK_FILE_NAME or entry.filename.endswith(CONFLICT_FILE_SUFFIX):
                     continue
-                if stat.S_ISDIR(entry.st_mode or 0):
-                    yield relative_name + '/', None
+                relative_path = path / entry.filename
+                relative_name = str(relative_path)
+                if is_dir := stat.S_ISDIR(entry.st_mode or 0):
+                    relative_name += '/'
+                if (options.remote_filter_patterns and not any(prefix_or_fnmatch(relative_name, p) for p in options.remote_filter_patterns)
+                        or options.remote_ignore_patterns and any(fnmatch(relative_name, p) for p in options.remote_ignore_patterns)
+                            and (not options.remote_ignore_not_patterns or not any(fnmatch(relative_name, p) for p in options.remote_ignore_not_patterns))):
+                    continue
+                if is_dir:
+                    yield relative_name, None
                     yield from _scandir(relative_path)
                 else:
                     yield relative_name, FileInfo(size=entry.st_size or 0, mtime=datetime.fromtimestamp(entry.st_mtime or 0, timezone.utc))
@@ -649,15 +737,11 @@ class Remote:
 
     def upload(self, local_open_fn, local_stat_fn, relative_path: str, rename: bool, local_fileinfo: FileInfo, remote_fileinfo: FileInfo | None):
         def _copy(to_full_path: str):
-            try:
-                with (
-                    local_open_fn(relative_path) as local_file,
-                    self.sftp.open(to_full_path, "w") as remote_file
-                ):
-                    shutil.copyfileobj(local_file, remote_file)
-                return True
-            except IOError:
-                return False # any error on any side
+            with (
+                local_open_fn(relative_path) as local_file,
+                self.sftp.open(to_full_path, "w") as remote_file
+            ):
+                shutil.copyfileobj(local_file, remote_file)
         def _utime(full_path: str):
             self.sftp.utime(full_path, (local_fileinfo.mtime.timestamp(), local_fileinfo.mtime.timestamp()))
         def _fileinfo(full_path: str):
@@ -692,26 +776,26 @@ class Remote:
             old_full_path = full_path + OLD_FILE_SUFFIX
             tmp_full_path = full_path + TMP_FILE_SUFFIX
             new_full_path = full_path + NEW_FILE_SUFFIX
-            if _copy(new_full_path):
-                _utime(new_full_path)
-                new_fileinfo = _fileinfo(new_full_path)
-                if remote_fileinfo:
-                    if _commitexisting(full_path, tmp_full_path, old_full_path):
-                        self.sftp.rename(new_full_path, full_path)
-                        self.sftp.remove(old_full_path)
-                        return new_fileinfo
-                else:
-                    if _commitnew(new_full_path, full_path):
-                        return new_fileinfo
+            _copy(new_full_path)
+            _utime(new_full_path)
+            new_fileinfo = _fileinfo(new_full_path)
+            if remote_fileinfo and _commitexisting(full_path, tmp_full_path, old_full_path):
+                self.sftp.rename(new_full_path, full_path)
+                self.sftp.remove(old_full_path)
+                return new_fileinfo
+            elif not remote_fileinfo and _commitnew(new_full_path, full_path):
+                return new_fileinfo
+            else:
+                return None
         elif options.overwrite_destination:
-            if _copy(full_path):
-                _utime(full_path)
-                return _fileinfo(full_path)
+            _copy(full_path)
+            _utime(full_path)
+            return _fileinfo(full_path)
         else: # rename
-            full_path += CONFLICT_FILE_SUFFIX
-            if _copy(full_path):
-                _utime(full_path)
-        return None
+            full_path += local_fileinfo.mtime.astimezone().strftime(".%Y%m%d-%H%M%S") + CONFLICT_FILE_SUFFIX
+            _copy(full_path)
+            _utime(full_path)
+            return None
 
     def mkdir(self, relative_path: str):
         full_path = str(self.remote_write_path / relative_path)
@@ -797,7 +881,7 @@ class Remote:
             if lock_stat is None and options.ignore_locks is None:
                 lock_stat = _get_stat(lock_file_name)
             if lock_stat is not None and lock_stat.st_mtime:
-                e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(lock_stat.st_mtime)}")
+                e.add_note(f"current lock file time stamp is: {datetime.fromtimestamp(lock_stat.st_mtime).replace(microsecond=0).astimezone()}")
             raise
 
     def _unlock(self):
@@ -873,86 +957,90 @@ class Storage:
             return State(dict(), dict(), None)
 
 class Sync:
-    def __init__(self, local: Local, remote: Remote, storage: Storage):
+    def __init__(self, local: Local, remote: Remote, storage: Storage, keyboard_interrupt: SignalFence):
         self.local = local
         self.remote = remote
         self.storage = storage
+        self.keyboard_interrupt = keyboard_interrupt
 
     def _is_identical(self, relative_path: str, use_compare_for_content_comparison: bool = True):
-        def _compare_or_hash_files():
-            def _compare_files():
-                logger.info_scanning("Comparing   %s/%s", self.local.local_folder, relative_path)
-                local_file = self.local.open(relative_path)
-                remote_file = self.remote.open(relative_path)
-                identical = True
-                while True:
-                    local_buffer = local_file.read(1024 * 1024)
-                    remote_buffer = remote_file.read(1024 * 1024)
-                    if local_buffer != remote_buffer:
-                        identical = False
-                        break
-                    if not local_buffer:
-                        break
-                return identical
-            def _hash_files():
-                def _hash_local_file():
+        def __is_identical():
+            def _compare_or_hash_files():
+                def _compare_files():
+                    logger.info_scanning("Comparing   %s/%s", self.local.local_folder, relative_path)
                     local_file = self.local.open(relative_path)
-                    digest = hashlib.sha256()
-                    while buffer := local_file.read(65536):
-                        digest.update(buffer)
-                    return digest.digest()
-                def _hash_remote_file():
                     remote_file = self.remote.open(relative_path)
-                    return remote_file.check('sha256', 0, 0, 0)
-                logger.info_scanning("Hashing     %s/%s", self.local.local_folder, relative_path)
-                # TODO Do it parallel
-                return _hash_local_file() == _hash_remote_file()
-            if (_hash_files() if options.use_hash_for_content_comparison else use_compare_for_content_comparison and _compare_files()):
-                self.identical.add(relative_path)
+                    identical = True
+                    while True:
+                        local_buffer = local_file.read(1024 * 1024)
+                        remote_buffer = remote_file.read(1024 * 1024)
+                        if local_buffer != remote_buffer:
+                            identical = False
+                            break
+                        if not local_buffer:
+                            break
+                    return identical
+                def _hash_files():
+                    def _hash_local_file():
+                        local_file = self.local.open(relative_path)
+                        digest = hashlib.sha256()
+                        while buffer := local_file.read(65536):
+                            digest.update(buffer)
+                        return digest.digest()
+                    def _hash_remote_file():
+                        remote_file = self.remote.open(relative_path)
+                        return remote_file.check('sha256', 0, 0, 0)
+                    logger.info_scanning("Hashing     %s/%s", self.local.local_folder, relative_path)
+                    # TODO Do it parallel
+                    return _hash_local_file() == _hash_remote_file()
+                if options.use_hash_for_content_comparison:
+                    return _hash_files()
+                elif use_compare_for_content_comparison:
+                    return _compare_files()
+                else:
+                    return False
+            if relative_path.endswith('/'):
                 return True
-            return False
-        if relative_path.endswith('/'):
-            return True
-        local_fileinfo = cast(FileInfo, self.local_current[relative_path])
-        remote_fileinfo = cast(FileInfo, self.remote_current[relative_path])
-        return (local_fileinfo.size == remote_fileinfo.size
-            and ((options.use_mtime_for_comparison and local_fileinfo.mtime == remote_fileinfo.mtime)
-                or (options.use_content_for_comparison and _compare_or_hash_files())
-                or (not options.use_mtime_for_comparison and not options.use_content_for_comparison)))
+            local_fileinfo = cast(FileInfo, self.local_current[relative_path])
+            remote_fileinfo = cast(FileInfo, self.remote_current[relative_path])
+            return (local_fileinfo.size == remote_fileinfo.size
+                and ((options.use_mtime_for_comparison and local_fileinfo.mtime == remote_fileinfo.mtime)
+                    or (options.use_content_for_comparison and _compare_or_hash_files())
+                    or (not options.use_mtime_for_comparison and not options.use_content_for_comparison)))
+        if is_identical := __is_identical():
+            self.local_tracking[relative_path] = self.local_current[relative_path]
+            self.remote_tracking[relative_path] = self.remote_current[relative_path]
+        return is_identical
 
     @property
     @abstractmethod
     def is_local_destination(self) -> bool:
         pass
 
-    def collect(self):
-        def _equal_entries(current, previous, time_shift: timedelta | None):
-            if isinstance(current, FileInfo) and isinstance(previous, FileInfo):
-                return current.is_equal_previous(previous, time_shift)
-            else:
-                return current == previous
-        def _new_entries(current: dict, previous: dict):
-            return {k for k in current.keys() if k not in previous}
-        def _deleted_entries(current: dict, previous: dict):
-            return {k for k in previous.keys() if k not in current}
-        def _changed_entries(current: dict, previous: dict, time_shift: timedelta | None = None):
-            return {k for k in current.keys() if k in previous and not _equal_entries(current[k], previous[k], time_shift)}
-        def _unchanged_entries(current: dict, previous: dict, time_shift: timedelta | None = None):
-            return {k for k in current.keys() if k in previous and _equal_entries(current[k], previous[k], time_shift)}
-
-        logger.info_header("----------- Scanning")
-
+    def load(self):
         previous_state = self.storage.load_state()
         self.local_previous = previous_state.local
         self.remote_previous = previous_state.remote
         self.remote_timezone_mtime_previous = previous_state.remote_timezone_mtime
 
-        self.local_current = dict(sorted(self.local.scandir(self.is_local_destination)))
+    def collect(self):
+        def _new_entries(current: dict, previous: dict):
+            return {k for k in current.keys() if k not in previous}
+        def _deleted_entries(current: dict, previous: dict):
+            return {k for k in previous.keys() if k not in current}
+        def _changed_entries(current: dict, previous: dict):
+            return {k for k in current.keys() if k in previous and current[k] != previous[k]}
+        def _unchanged_entries(current: dict, previous: dict):
+            return {k for k in current.keys() if k in previous and current[k] == previous[k]}
+
+        logger.info_header("----------- Scanning")
+
+        self.local_current = dict(self.local.scandir(self.is_local_destination))
         if self.local.has_unsupported_hardlink:
             raise RuntimeError("Hardlinks can't be used on local side as destination without enabling --overwrite-destination option")
         if self.local.has_unsupported_folder_symlink:
             raise RuntimeError("Folder symlinks or junctions can't be used on local side as destination without enabling --folder-symlink-as-destination option")
-        self.remote_current = dict(sorted(self.remote.scandir()))
+        self.remote_current = dict(self.remote.scandir())
         self.remote_timezone_mtime_current = self.remote.timezone_offset_measurement_mtime
 
         # FAT (FAT32, exFAT) stores mtime in local time, if the DST changes or the phone moves to another timezone, all mtime will change.
@@ -972,16 +1060,29 @@ class Sync:
                 logger.debug("Remote timezone offset change %s minutes is detected, any modification time change that is identical with this is ignored",
                     int(remote_timezone_mtime_change_minutes))
                 remote_time_shift = remote_timezone_mtime_change
+        if remote_time_shift:
+            for fileinfo in self.remote_previous.values():
+                if fileinfo:
+                    fileinfo.mtime += remote_time_shift
 
-        self.local_new = _new_entries(self.local_current, self.local_previous)
-        self.local_deleted = _deleted_entries(self.local_current, self.local_previous)
-        self.local_changed = _changed_entries(self.local_current, self.local_previous)
-        self.local_unchanged = _unchanged_entries(self.local_current, self.local_previous)
+        local_previous_filtered = {k: v for k, v in self.local_previous.items()
+            if (not options.local_filter_patterns or any(prefix_or_fnmatch(k, p) for p in options.local_filter_patterns))
+            and (not options.local_ignore_patterns or not any(fnmatch(k, p) for p in options.local_ignore_patterns)
+                or options.local_ignore_not_patterns and any(fnmatch(k, p) for p in options.local_ignore_not_patterns))}
+        remote_previous_filtered = {k: v for k, v in self.remote_previous.items()
+            if (not options.remote_filter_patterns or any(prefix_or_fnmatch(k, p) for p in options.remote_filter_patterns))
+            and (not options.remote_ignore_patterns or not any(fnmatch(k, p) for p in options.remote_ignore_patterns)
+                or options.remote_ignore_not_patterns and any(fnmatch(k, p) for p in options.remote_ignore_not_patterns))}
 
-        self.remote_new = _new_entries(self.remote_current, self.remote_previous)
-        self.remote_deleted = _deleted_entries(self.remote_current, self.remote_previous)
-        self.remote_changed = _changed_entries(self.remote_current, self.remote_previous, remote_time_shift)
-        self.remote_unchanged = _unchanged_entries(self.remote_current, self.remote_previous, remote_time_shift)
+        self.local_new = _new_entries(self.local_current, local_previous_filtered)
+        self.local_deleted = _deleted_entries(self.local_current, local_previous_filtered)
+        self.local_changed = _changed_entries(self.local_current, local_previous_filtered)
+        self.local_unchanged = _unchanged_entries(self.local_current, local_previous_filtered)
+
+        self.remote_new = _new_entries(self.remote_current, remote_previous_filtered)
+        self.remote_deleted = _deleted_entries(self.remote_current, remote_previous_filtered)
+        self.remote_changed = _changed_entries(self.remote_current, remote_previous_filtered)
+        self.remote_unchanged = _unchanged_entries(self.remote_current, remote_previous_filtered)
 
         self.delete_local = set()
         self.delete_remote = set()
@@ -989,8 +1090,11 @@ class Sync:
         self.upload = set()
         self.download_with_rename = set()
         self.upload_with_rename = set()
-        self.identical = set()
         self.conflict = dict()
+
+        self.local_tracking = dict(self.local_previous)
+        self.remote_tracking = dict(self.remote_previous)
+        self.remote_timezone_mtime_tracking = self.remote_timezone_mtime_current
 
     def compare(self):
         logger.info_header("----------- Analyzing")
@@ -1005,12 +1109,6 @@ class Sync:
                         return f"{num:.1f} {unit}{suffix}"
                 num /= 1024.0
             return f"{num:.1f} T{suffix}"
-        def _forget_changes(current: dict, previous: dict, relative_path: str):
-            previous_entry = previous.get(relative_path, None)
-            if previous_entry:
-                current[relative_path] = previous_entry
-            else:
-                current.pop(relative_path, None)
 
         logger.info_header("----------- Executing")
 
@@ -1026,7 +1124,8 @@ class Sync:
             logger.info("<<< DEL     %s/%s", self.local.local_folder, relative_path)
             if not options.dry:
                 if self.local.remove(relative_path, self.local_current[relative_path]):
-                    del self.local_current[relative_path]
+                    self.local_tracking.pop(relative_path, None)
+                    self.remote_tracking.pop(relative_path, None)
                 else:
                     logger.info("< CHANGED     will be processed only on the next run")
 
@@ -1035,7 +1134,8 @@ class Sync:
             logger.info("    DEL >>> %s/%s", self.local.local_folder, relative_path)
             if not options.dry:
                 if self.remote.remove(relative_path, self.remote_current[relative_path]):
-                    del self.remote_current[relative_path]
+                    self.local_tracking.pop(relative_path, None)
+                    self.remote_tracking.pop(relative_path, None)
                 else:
                     logger.info("  CHANGED >   will be processed only on the next run")
 
@@ -1045,19 +1145,22 @@ class Sync:
                 logger.info("<<<<<<<     %s/%s", self.local.local_folder, relative_path)
                 if not options.dry:
                     self.local.mkdir(relative_path)
-                    self.local_current[relative_path] = None
+                    self.local_tracking[relative_path] = None
+                    self.remote_tracking[relative_path] = None
             else:
                 remote_fileinfo = cast(FileInfo, self.remote_current[relative_path])
                 rename = relative_path in self.download_with_rename
-                logger.info("<<<<<<< %s %s/%s, size: %s, time: %s", "   " if not rename else "!!!", self.local.local_folder, relative_path, _filesize_fmt(remote_fileinfo.size), remote_fileinfo.mtime)
+                logger.info("<<<<<<< %s %s/%s, size: %s, time: %s", "   " if not rename else "!!!", self.local.local_folder, relative_path, _filesize_fmt(remote_fileinfo.size), remote_fileinfo.mtime.replace(microsecond=0).astimezone())
                 if not options.dry:
                     if not rename:
                         if new_local_fileinfo := self.local.download(relative_path, False, self.remote.open, self.remote.stat, self.local_current.get(relative_path), remote_fileinfo):
-                            self.local_current[relative_path] = new_local_fileinfo
+                            self.local_tracking[relative_path] = new_local_fileinfo
+                            self.remote_tracking[relative_path] = remote_fileinfo
                         else:
                             logger.info("< CHANGED >   will be processed only on the next run")
                     else:
-                        self.local.download(relative_path, True, self.remote.open, self.remote.stat, self.local_current.get(relative_path), remote_fileinfo)
+                        self.local.download(relative_path, True, self.remote.open, self.remote.stat, None, remote_fileinfo)
+                        self.remote_tracking[relative_path] = remote_fileinfo
 
         for relative_path in chain(sorted({p for p in self.upload if p.endswith('/')}, key=lambda p: (p.count('/'), p)),                   # first create folders
                 sorted({p for p in chain(self.upload, self.upload_with_rename) if not p.endswith('/')}, key=lambda p: (p.count('/'), p))): # then upload files
@@ -1065,19 +1168,22 @@ class Sync:
                 logger.info("    >>>>>>> %s/%s", self.local.local_folder, relative_path)
                 if not options.dry:
                     self.remote.mkdir(relative_path)
-                    self.remote_current[relative_path] = None
+                    self.local_tracking[relative_path] = None
+                    self.remote_tracking[relative_path] = None
             else:
                 local_fileinfo = cast(FileInfo, self.local_current[relative_path])
                 rename = relative_path in self.upload_with_rename
-                logger.info("%s >>>>>>> %s/%s, size: %s, time: %s", "   " if not rename else "!!!", self.local.local_folder, relative_path, _filesize_fmt(local_fileinfo.size), local_fileinfo.mtime)
+                logger.info("%s >>>>>>> %s/%s, size: %s, time: %s", "   " if not rename else "!!!", self.local.local_folder, relative_path, _filesize_fmt(local_fileinfo.size), local_fileinfo.mtime.replace(microsecond=0).astimezone())
                 if not options.dry:
                     if not rename:
                         if new_remote_fileinfo := self.remote.upload(self.local.open, self.local.stat, relative_path, False, local_fileinfo, self.remote_current.get(relative_path)):
-                            self.remote_current[relative_path] = new_remote_fileinfo
+                            self.local_tracking[relative_path] = local_fileinfo
+                            self.remote_tracking[relative_path] = new_remote_fileinfo
                         else:
                             logger.info("< CHANGED >   will be processed only on the next run")
                     else:
-                        self.remote.upload(self.local.open, self.local.stat, relative_path, True, local_fileinfo, self.remote_current.get(relative_path))
+                        self.remote.upload(self.local.open, self.local.stat, relative_path, True, local_fileinfo, None)
+                        self.local_tracking[relative_path] = local_fileinfo
 
         for relative_path, reason in sorted(self.conflict.items(), key=lambda p: (p.count('/'), p)):
             def _extended_reason():
@@ -1086,7 +1192,7 @@ class Sync:
                         f", size: {_filesize_fmt(left_fileinfo.size)} ({format(left_fileinfo.size, ',d').replace(',',' ')}) "
                             f"{'>' if left_fileinfo.size > right_fileinfo.size else '<' if left_fileinfo.size < right_fileinfo.size else '='} "
                             f"{_filesize_fmt(right_fileinfo.size)} ({format(right_fileinfo.size, ',d').replace(',',' ')})"
-                        f", time: {left_fileinfo.mtime} {'>' if left_fileinfo.mtime > right_fileinfo.mtime else '<' if left_fileinfo.mtime < right_fileinfo.mtime else '='} {right_fileinfo.mtime}")
+                        f", time: {left_fileinfo.mtime.replace(microsecond=0).astimezone()} {'>' if left_fileinfo.mtime > right_fileinfo.mtime else '<' if left_fileinfo.mtime < right_fileinfo.mtime else '='} {right_fileinfo.mtime.replace(microsecond=0).astimezone()}")
                 extended_reason = f"              {reason}"
                 local_fileinfo = self.local_current.get(relative_path)
                 remote_fileinfo = self.remote_current.get(relative_path)
@@ -1102,30 +1208,31 @@ class Sync:
                     if fileinfo and previous_fileinfo:
                         extended_reason += _extended_reason_compare(previous_fileinfo, fileinfo)
                     elif fileinfo:
-                        extended_reason += f", size: {_filesize_fmt(fileinfo.size)} ({format(fileinfo.size, ',d').replace(',',' ')}), time: {fileinfo.mtime}"
+                        extended_reason += f", size: {_filesize_fmt(fileinfo.size)} ({format(fileinfo.size, ',d').replace(',',' ')}), time: {fileinfo.mtime.replace(microsecond=0).astimezone()}"
                 return extended_reason
             logger.warning("<<< !!! >>> %s/%s", self.local.local_folder, relative_path)
             logger.warning(LazyStr(_extended_reason))
-            _forget_changes(self.local_current, self.local_previous, relative_path)
-            _forget_changes(self.remote_current, self.remote_previous, relative_path)
 
         if not self.delete_local and not self.delete_remote and not self.download and not self.upload and not self.download_with_rename and not self.upload_with_rename and not self.conflict:
             logger.info_header("----------- Everything is up to date!")
 
-        if not options.dry:
-            self.storage.save_state(State(self.local_current, self.remote_current, self.remote_timezone_mtime_current))
-        else:
-            if self.identical:
-                # even if we didn't changed anything in the file-system, we can remember the fact, that some files are checked by hash/content, and they are de facto identical
-                for relative_path in self.identical:
-                    self.local_previous[relative_path] = self.local_current[relative_path]
-                    self.remote_previous[relative_path] = self.remote_current[relative_path]
-                self.storage.save_state(State(self.local_previous, self.remote_previous, self.remote_timezone_mtime_previous))
+    def save(self):
+        self.storage.save_state(State(self.local_tracking, self.remote_tracking, self.remote_timezone_mtime_tracking))
 
     def run(self):
-        self.collect()
-        self.compare()
-        self.execute()
+        self.load()
+        with self.keyboard_interrupt.unprotect():
+            self.collect()
+            logger.debug("Local previous count:  %d, Local current count:  %d", len(self.local_previous), len(self.local_current))
+            logger.debug("Remote previous count: %d, Remote current count: %d", len(self.remote_previous), len(self.remote_current))
+            try:
+                self.compare()
+                self.execute()
+            finally:
+                logger.debug("Local tracking count:  %d, Local current count:  %d", len(self.local_tracking), len(self.local_current))
+                logger.debug("Remote tracking count: %d, Remote current count: %d", len(self.remote_tracking), len(self.remote_current))
+                self.keyboard_interrupt.disable()
+                self.save()
 
 # Bidirectional comparison
 #
@@ -1597,11 +1704,12 @@ def main():
         parser.add_argument('-d', '--dry', help="no files changed in the synchronized folder(s), only internal state gets updated and temporary files get cleaned up", default=False, action='store_true')
         parser.add_argument('-D', '--dry-on-conflict', help="in case of unresolved conflict(s), run dry", default=False, action='store_true')
         parser.add_argument('-rs', '--remote-state-prefix', metavar="PATH", help="stores remote state in a common .prim-sync folder under PATH instead of under the remote-folder argument (decreases SD card wear), eg. /fs/storage/emulated/0\n"
-                            "Note: currently only the .lock file is stored here\n"
-                            "Note: if you access the same server from multiple clients, you have to specify the same --remote-state-prefix option everywhere to prevent concurrent access")
+            "Note: currently only the .lock file is stored here\n"
+            "Note: if you access the same server from multiple clients, you have to specify the same --remote-state-prefix option everywhere to prevent concurrent access")
         parser.add_argument('--overwrite-destination', help="don't use temporary files and renaming for failsafe updates - it is faster, but you will definitely shoot yourself in the foot when used with bidirectional sync", default=False, action='store_true')
         parser.add_argument('--folder-symlink-as-destination', help="enables writing and deleting symlinked folders and files in them on the local side - it can make sense, but you will definitely shoot yourself in the foot", default=False, action='store_true')
         parser.add_argument('--ignore-locks', nargs='?', metavar="MINUTES", help="ignore locks left over from previous run, optionally only if they are older than MINUTES minutes", type=int, default=None, const=0, action='store')
+        parser.add_argument('--noop', help="no-operation, will connect but won't even scan the files - can be used to delete stale locks", default=False, action='store_true')
 
         logging_group = parser.add_argument_group('logging')
         logging_group.add_argument('-t', '--timestamp', help="prefix each message with a timestamp", default=False, action='store_true')
@@ -1615,6 +1723,19 @@ def main():
         comparison_group.add_argument('-C', '--dont-use-content-for-comparison', dest="use_content_for_comparison", help="beyond size, modification time or content must be equal, if both are disabled, only size is compared", default=True, action='store_false')
         comparison_group.add_argument('-H', '--dont-use-hash-for-content-comparison', dest="use_hash_for_content_comparison", help="not all sftp servers support hashing, but downloading content for comparison is much slower than hashing", default=True, action='store_false')
 
+        filtering_group = parser.add_argument_group('filtering', description=
+            "Note: ignore patterns have higher priority than filter patterns\n"
+            "Note: ignore-not patterns have higher priority than ignore patterns")
+        filtering_group.add_argument('-f', '--filter', nargs='+', metavar="PATTERN", help="only files matching this Unix shell PATTERN will be scanned, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-i', '--ignore', nargs='+', metavar="PATTERN", help="only files not matching this Unix shell PATTERN will be scanned, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-in', '--ignore-not', nargs='+', metavar="PATTERN", help="files matching this Unix shell PATTERN will not be ignored, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-lf', '--local-filter', nargs='+', metavar="PATTERN", help="only files matching this Unix shell PATTERN will be scanned locally, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-li', '--local-ignore', nargs='+', metavar="PATTERN", help="only files not matching this Unix shell PATTERN will be scanned locally, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-lin', '--local-ignore-not', nargs='+', metavar="PATTERN", help="files matching this Unix shell PATTERN will not be ignored locally, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-rf', '--remote-filter', nargs='+', metavar="PATTERN", help="only files matching this Unix shell PATTERN will be scanned remotely, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-ri', '--remote-ignore', nargs='+', metavar="PATTERN", help="only files not matching this Unix shell PATTERN will be scanned remotely, multiple values are allowed, separated by space")
+        filtering_group.add_argument('-rin', '--remote-ignore-not', nargs='+', metavar="PATTERN", help="files matching this Unix shell PATTERN will not be ignored remotely, multiple values are allowed, separated by space")
+
         bidir_conflict_resolution_group = parser.add_argument_group('bidirectional conflict resolution')
         bidir_conflict_resolution_newer_older_group = bidir_conflict_resolution_group.add_mutually_exclusive_group()
         bidir_conflict_resolution_newer_older_group.add_argument('-n', '--newer-wins', help="in case of conflict, newer file wins", default=False, action='store_true')
@@ -1623,15 +1744,17 @@ def main():
         bidir_conflict_resolution_change_deletion_group.add_argument('-cod', '--change-wins-over-deletion', help="in case of conflict, changed/new file wins over deleted file", default=False, action='store_true')
         bidir_conflict_resolution_change_deletion_group.add_argument('-doc', '--deletion-wins-over-change', help="in case of conflict, deleted file wins over changed/new file", default=False, action='store_true')
         bidir_conflict_resolution_group.add_argument('-l', '--local-wins-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, local files matching this Unix shell PATTERN win, multiple values are allowed, separated by space\n"
-                                                      "if no PATTERN is specified, local always wins")
+            "if no PATTERN is specified, local always wins")
         bidir_conflict_resolution_group.add_argument('-r', '--remote-wins-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, remote files matching this Unix shell PATTERN win, multiple values are allowed, separated by space\n"
-                                                      "if no PATTERN is specified, remote always wins")
-        bidir_conflict_resolution_group.add_argument('-cl', '--copy-to-local', help="in case of conflict, copy remote file to local with .prim-sync.conflict added to file name", default=False, action='store_true')
-        bidir_conflict_resolution_group.add_argument('-cr', '--copy-to-remote', help="in case of conflict, copy local file to remote with .prim-sync.conflict added to file name", default=False, action='store_true')
+            "if no PATTERN is specified, remote always wins")
+        bidir_conflict_resolution_group.add_argument('-cl', '--copy-to-local', help="in case of conflict, copy remote file to local with timestamp and .prim-sync.conflict added to file name\n"
+            "remote file treated as synchronized from now on", default=False, action='store_true')
+        bidir_conflict_resolution_group.add_argument('-cr', '--copy-to-remote', help="in case of conflict, copy local file to remote with timestamp and .prim-sync.conflict added to file name\n"
+            "local file treated as synchronized from now on", default=False, action='store_true')
 
         unidir_conflict_resolution_group = parser.add_argument_group('unidirectional conflict resolution')
         unidir_conflict_resolution_group.add_argument('-m', '--mirror-patterns', nargs='*', metavar="PATTERN", help="in case of conflict, mirror source side files matching this Unix shell PATTERN to destination side, multiple values are allowed, separated by space\n"
-                                                      "if no PATTERN is specified, all files will be mirrored")
+            "if no PATTERN is specified, all files will be mirrored")
 
         args = parser.parse_args()
 
@@ -1651,6 +1774,12 @@ def main():
             use_mtime_for_comparison=args.use_mtime_for_comparison,
             use_content_for_comparison=args.use_content_for_comparison,
             use_hash_for_content_comparison=args.use_hash_for_content_comparison,
+            local_filter_patterns=set((args.filter or []) + (args.local_filter or [])),
+            local_ignore_patterns=set((args.ignore or []) + (args.local_ignore or [])),
+            local_ignore_not_patterns=set((args.ignore_not or []) + (args.local_ignore_not or [])),
+            remote_filter_patterns=set((args.filter or []) + (args.remote_filter or [])),
+            remote_ignore_patterns=set((args.ignore or []) + (args.remote_ignore or [])),
+            remote_ignore_not_patterns=set((args.ignore_not or []) + (args.remote_ignore_not or [])),
             newer_wins=args.newer_wins,
             older_wins=args.older_wins,
             change_wins_over_deletion=args.change_wins_over_deletion,
@@ -1715,23 +1844,34 @@ def main():
                 _connect_ssh(10, 30)
                 with (
                     ssh.open_sftp() as sftp,
+                    SignalFence(signal.SIGINT, lambda signum, frame: logger.debug("Keyboard interrupt received, finishing ongoing operations before exit")).protect() as keyboard_interrupt,
                     Local(local_folder, local_path) as local,
                     Remote(local_folder, sftp, remote_read_path, remote_write_path) as remote
                 ):
-                    storage = Storage(local_path, args.server_name)
-                    if args.unidirectional_inward:
-                        sync = UnidirectionalInwardSync(local, remote, storage)
-                    elif args.unidirectional_outward:
-                        sync = UnidirectionalOutwardSync(local, remote, storage)
-                    else:
-                        sync = BidirectionalSync(local, remote, storage)
-                    sync.run()
+                    if not args.noop:
+                        storage = Storage(local_path, args.server_name)
+                        if args.unidirectional_inward:
+                            sync = UnidirectionalInwardSync(local, remote, storage, keyboard_interrupt)
+                        elif args.unidirectional_outward:
+                            sync = UnidirectionalOutwardSync(local, remote, storage, keyboard_interrupt)
+                        else:
+                            sync = BidirectionalSync(local, remote, storage, keyboard_interrupt)
+                        sync.run()
 
     except Exception as e:
         logger.exception_or_error(e)
 
+    except KeyboardInterrupt:
+        logger.critical("Interrupted by user", signal=signal.SIGINT)
+
     return logger.exitcode
 
 def run():
-    with suppress(KeyboardInterrupt):
-        exit(main())
+    try:
+        sys.exit(main())
+    finally:
+        # Windows: suppress stderr during interpreter shutdown to silence asyncio
+        # transport __del__ exceptions (ValueError from closed pipes).
+        # This must happen after main() returns but before Python garbage collects.
+        if sys.platform == "win32":
+            sys.stderr = open(os.devnull, "w")
