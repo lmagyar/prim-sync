@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.2
+
+- Fine tune exception representation is log messages
+
 ## 0.10.1
 
 - Fix sonarqube issues
