@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.10.2
 
 - Fine tune exception representation is log messages
 
