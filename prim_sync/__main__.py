@@ -49,13 +49,19 @@ class LevelFormatter(logging.Formatter):
         return self.formatters.get(record.levelno, self.default_formatter).format(record)
 
 class Logger(logging.Logger):
+    timestamp: bool = False
+
+    @staticmethod
+    def setConfiguration(timestamp: bool):
+        Logger.timestamp = timestamp
+
     def __init__(self, name, level = logging.NOTSET):
         super().__init__(name, level)
-        self.exitcode = 0
+        self.addHandler(logging.StreamHandler(sys.stderr))
+        self.configure()
 
-    def prepare(self, timestamp: bool, silent: bool, silent_scanning: bool, silent_headers: bool):
-        handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(
+    def configure(self):
+        formatter = (
             LevelFormatter(
                 {
                     logging.WARNING: '%(asctime)s %(message)s',
@@ -63,7 +69,7 @@ class Logger(logging.Logger):
                     logging.DEBUG: '%(asctime)s %(levelname)s %(message)s',
                 },
                 '%(asctime)s %(name)s: %(levelname)s: %(message)s')
-            if timestamp else
+            if Logger.timestamp else
             LevelFormatter(
                 {
                     logging.WARNING: '%(message)s',
@@ -72,9 +78,16 @@ class Logger(logging.Logger):
                 },
                 '%(name)s: %(levelname)s: %(message)s')
         )
-        self.addHandler(handler)
-        if self.level == logging.NOTSET:
-            self.setLevel(logging.WARNING if silent else logging.INFO)
+        for handler in self.handlers:
+            handler.setFormatter(formatter)
+
+class MainLogger(Logger):
+    def __init__(self, name, level = logging.NOTSET):
+        super().__init__(name, level)
+        self.exitcode = 0
+
+    def setConfiguration(self, level: int, silent_scanning: bool, silent_headers: bool):
+        self.setLevel(level)
         self.silent_scanning = silent_scanning
         self.silent_headers = silent_headers
 
@@ -124,7 +137,7 @@ class LazyStr:
                 self.result = str(self.func)
         return self.result
 
-logger = Logger(Path(sys.argv[0]).name)
+logger = MainLogger(Path(sys.argv[0]).name)
 
 ########
 
@@ -1745,12 +1758,17 @@ def main(): # NOSONAR(S3776)
 
         args = parser.parse_args()
 
-        if args.debug:
-            logger.setLevel(logging.DEBUG)
-        logger.prepare(args.timestamp or args.debug, args.silent, args.silent_scanning, args.silent_headers)
+        Logger.setConfiguration(args.timestamp or args.debug)
+        logging.setLoggerClass(Logger)
+        logger.setConfiguration(
+            logging.DEBUG if args.debug else logging.WARNING if args.silent else logging.INFO, #NOSONAR(S3358)
+            args.silent_scanning,
+            args.silent_headers)
+        logger.configure()
 
         if args.unidirectional_inward or args.unidirectional_outward:
-            if args.newer_wins or args.older_wins or args.change_wins_over_deletion or args.deletion_wins_over_change or args.local_wins_patterns is not None or args.remote_wins_patterns is not None:
+            if (args.newer_wins or args.older_wins or args.change_wins_over_deletion or args.deletion_wins_over_change
+                    or args.local_wins_patterns is not None or args.remote_wins_patterns is not None or args.copy_to_local or args.copy_to_remote):
                 raise ValueError("Can't specify bidirectional options for unidirectional sync")
         else:
             if args.mirror_patterns is not None:
