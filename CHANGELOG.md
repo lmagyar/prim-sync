@@ -1,6 +1,6 @@
 # Changelog
 
-## vNext
+## 0.10.3
 
 - Refactor logging for other modules also
 - Fail also if copy_to_local and copy_to_remote is specified for unidirectional sync
