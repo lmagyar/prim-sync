@@ -1,5 +1,9 @@
 # Changelog
 
+## vNext
+
+- Fail also if copy_to_local and copy_to_remote is specified for unidirectional sync
+
 ## 0.10.2
 
 - Fine tune exception representation is log messages

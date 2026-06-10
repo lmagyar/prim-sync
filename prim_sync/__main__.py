@@ -1750,7 +1750,8 @@ def main(): # NOSONAR(S3776)
         logger.prepare(args.timestamp or args.debug, args.silent, args.silent_scanning, args.silent_headers)
 
         if args.unidirectional_inward or args.unidirectional_outward:
-            if args.newer_wins or args.older_wins or args.change_wins_over_deletion or args.deletion_wins_over_change or args.local_wins_patterns is not None or args.remote_wins_patterns is not None:
+            if (args.newer_wins or args.older_wins or args.change_wins_over_deletion or args.deletion_wins_over_change
+                    or args.local_wins_patterns is not None or args.remote_wins_patterns is not None or args.copy_to_local or args.copy_to_remote):
                 raise ValueError("Can't specify bidirectional options for unidirectional sync")
         else:
             if args.mirror_patterns is not None:
